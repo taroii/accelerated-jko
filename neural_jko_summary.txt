@@ -1,0 +1,18 @@
+=================================================================
+NEURAL JKO EXPERIMENT SUMMARY   γ=0.5,  blocks=12
+=================================================================
+
+Initial KL  = 11.6246
+Final KL   Standard JKO : 3.6240
+Final KL   Accelerated  : 3.5658
+
+Final W2   Standard JKO : 0.3213
+Final W2   Accelerated  : 0.3201
+
+Target fraction           Std JKO blocks    Acc JKO blocks
+  KL < 0.80·KL₀ = 9.300                  1                  1
+  KL < 0.50·KL₀ = 5.812                  1                  1
+  KL < 0.20·KL₀ = 2.325                 >N                 >N
+  KL < 0.10·KL₀ = 1.162                 >N                 >N
+
+=================================================================
