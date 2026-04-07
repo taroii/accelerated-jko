@@ -22,7 +22,10 @@ Key insight:
     while accelerated JKO maintains O(t^-^2) and dramatically outperforms it.
 """
 
+import os
 import numpy as np
+
+os.makedirs("images", exist_ok=True)
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 from matplotlib.lines import Line2D
@@ -280,9 +283,9 @@ plot_scenario(res2, axes[1],
               title_prefix=r'Weakly convex  $(\lambda=0.04,\ q=\mathcal{N}(0,5))$')
 
 plt.tight_layout()
-fig.savefig('/mnt/user-data/outputs/jko_convergence_comparison.png',
+fig.savefig('images/jko_convergence_comparison.png',
             dpi=150, bbox_inches='tight')
-print("Saved figure 1: jko_convergence_comparison.png")
+print("Saved figure 1: images/jko_convergence_comparison.png")
 
 
 # ==========================================================
@@ -319,9 +322,9 @@ for ax, title in zip(axes2, ['Standard JKO (log-linear)', 'Accelerated JKO (log-
     ax.grid(True, which='both', ls=':', alpha=0.4)
 
 plt.tight_layout()
-fig2.savefig('/mnt/user-data/outputs/jko_step_size_sensitivity.png',
+fig2.savefig('images/jko_step_size_sensitivity.png',
              dpi=150, bbox_inches='tight')
-print("Saved figure 2: jko_step_size_sensitivity.png")
+print("Saved figure 2: images/jko_step_size_sensitivity.png")
 
 
 # ==========================================================
@@ -349,3 +352,95 @@ print("\n" + "="*70)
 
 plt.show()
 print("\nDone.")
+
+# ==========================================================
+# 10.  BLOCK DEPTH SWEEP
+# ==========================================================
+#
+# Question: does the advantage of acceleration grow with depth N?
+# If standard JKO is O(1/t) and accelerated is O(1/t^2), the ratio
+# G_std(N)/G_acc(N) at the final block should grow like O(N).
+
+os.makedirs("results", exist_ok=True)
+
+N_blocks_list = [4, 8, 16, 32, 64, 128]
+depth_gamma = 0.5
+depth_lam   = 0.04   # weakly convex — where acceleration matters most
+
+G_std_finals = []
+G_acc_finals = []
+ratios       = []
+
+for N in N_blocks_list:
+    G_std, _ = run_standard_jko(m0, s0, depth_gamma, depth_lam, N)
+    G_acc, _ = run_accelerated_jko(m0, s0, depth_gamma, depth_lam, N)
+    g_s = G_std[-1]
+    g_a = G_acc[-1]
+    G_std_finals.append(g_s)
+    G_acc_finals.append(g_a)
+    ratios.append(g_s / g_a)
+
+G_std_finals = np.array(G_std_finals)
+G_acc_finals = np.array(G_acc_finals)
+ratios       = np.array(ratios)
+N_arr        = np.array(N_blocks_list, dtype=float)
+
+# ---- console summary ----
+print("\n" + "=" * 70)
+print("BLOCK DEPTH SWEEP  (lambda=0.04, gamma=0.5)")
+print("=" * 70)
+print(f"  {'N':>6}   {'G_std(N)':>12}   {'G_acc(N)':>12}   {'ratio':>10}")
+print(f"  {'------':>6}   {'--------':>12}   {'--------':>12}   {'-----':>10}")
+for i, N in enumerate(N_blocks_list):
+    print(f"  {N:6d}   {G_std_finals[i]:12.6f}   {G_acc_finals[i]:12.6f}   {ratios[i]:10.3f}")
+print("=" * 70)
+
+# ---- save summary to file ----
+with open("results/depth_sweep_comparison.txt", "w") as f:
+    f.write("Block Depth Sweep — Weakly Convex (lambda=0.04, gamma=0.5)\n")
+    f.write("=" * 60 + "\n")
+    f.write(f"  {'N':>6}   {'G_std(N)':>12}   {'G_acc(N)':>12}   {'ratio':>10}\n")
+    f.write(f"  {'------':>6}   {'--------':>12}   {'--------':>12}   {'-----':>10}\n")
+    for i, N in enumerate(N_blocks_list):
+        f.write(f"  {N:6d}   {G_std_finals[i]:12.6f}   {G_acc_finals[i]:12.6f}   {ratios[i]:10.3f}\n")
+    f.write("=" * 60 + "\n")
+
+# ---- two-panel figure ----
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5))
+fig.suptitle(r"Block Depth Sweep — Weakly Convex ($\lambda$=0.04, $\gamma$=0.5)",
+             fontsize=14, fontweight="bold")
+
+# Left panel: final G vs N (log-log)
+ax1.loglog(N_arr, G_std_finals, 'o-', color=BLUE, label="Standard JKO", linewidth=2)
+ax1.loglog(N_arr, G_acc_finals, 's-', color=RED,  label="Accelerated JKO", linewidth=2)
+
+# Reference lines anchored to the standard JKO value at the first N
+ref_N = N_arr / N_arr[0]
+ax1.loglog(N_arr, G_std_finals[0] / ref_N,      '--', color='gray',
+           alpha=0.6, label=r"$O(1/N)$")
+ax1.loglog(N_arr, G_acc_finals[0] / ref_N**2,   ':', color='gray',
+           alpha=0.6, label=r"$O(1/N^2)$")
+
+ax1.set_xlabel("Number of blocks  N", fontsize=12)
+ax1.set_ylabel("Final G (KL divergence)", fontsize=12)
+ax1.set_title("Final KL vs block depth", fontsize=12)
+ax1.legend(fontsize=10)
+ax1.grid(True, which="both", ls=":", alpha=0.4)
+
+# Right panel: ratio vs N (log-log)
+ax2.loglog(N_arr, ratios, 'D-', color='black', linewidth=2, label=r"$G_{\mathrm{std}}(N)\,/\,G_{\mathrm{acc}}(N)$")
+
+# O(N) reference line anchored to first ratio value
+ax2.loglog(N_arr, ratios[0] * ref_N, '--', color='gray',
+           alpha=0.6, label=r"$O(N)$ reference")
+
+ax2.set_xlabel("Number of blocks  N", fontsize=12)
+ax2.set_ylabel("Ratio  (standard / accelerated)", fontsize=12)
+ax2.set_title("Acceleration advantage vs depth", fontsize=12)
+ax2.legend(fontsize=10)
+ax2.grid(True, which="both", ls=":", alpha=0.4)
+
+plt.tight_layout(rect=[0, 0, 1, 0.93])
+plt.savefig("images/depth_sweep_comparison.png", dpi=150, bbox_inches="tight")
+print("Saved  images/depth_sweep_comparison.png")
+print("Saved  results/depth_sweep_comparison.txt")

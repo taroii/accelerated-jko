@@ -1,6 +1,7 @@
 numpy
 matplotlib
 torch
+torchvision
 geomloss
 pillow
 scipy

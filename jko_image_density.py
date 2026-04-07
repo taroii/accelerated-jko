@@ -38,10 +38,10 @@ Key design choices to maximise the visible gap between methods:
 
 Outputs
 -------
-  jko_image_particles_{name}.png   -- particle snapshots at every block
-  jko_image_convergence_{name}.png -- KL, W_2, and speedup-ratio curves
-  jko_image_target_{name}.png      -- density preview + samples
-  jko_image_summary_{name}.txt     -- numerical table
+  images/jko_image_particles_{name}.png   -- particle snapshots at every block
+  images/jko_image_convergence_{name}.png -- KL, W_2, and speedup-ratio curves
+  images/jko_image_target_{name}.png      -- density preview + samples
+  results/jko_image_summary_{name}.txt     -- numerical table
 
 Usage
 -----
@@ -53,6 +53,10 @@ Usage
 """
 
 import argparse
+import os
+
+os.makedirs("images", exist_ok=True)
+os.makedirs("results", exist_ok=True)
 import math
 import time
 import warnings
@@ -645,7 +649,7 @@ def plot_target_preview(target: ImageDensity2D,
 
 
 def print_summary(res_std, res_acc, gamma, n_blocks,
-                  target_name, savepath="jko_image_summary.txt"):
+                  target_name, savepath="results/jko_image_summary.txt"):
     lines = []
     sep   = "=" * 65
     lines += [sep,
@@ -725,7 +729,7 @@ if __name__ == "__main__":
     print(f"Target: '{target_name}'  ({args.res}*{args.res} grid)")
 
     plot_target_preview(target, target_name,
-                        savepath=f"jko_image_target_{target_name}.png")
+                        savepath=f"images/jko_image_target_{target_name}.png")
     if args.preview:
         raise SystemExit(0)
 
@@ -749,18 +753,18 @@ if __name__ == "__main__":
     plot_particle_evolution(
         res_std, res_acc, target,
         args.blocks, target_name,
-        savepath=f"jko_image_particles_{target_name}.png"
+        savepath=f"images/jko_image_particles_{target_name}.png"
     )
 
     plot_convergence(
         res_std, res_acc,
         args.blocks, args.gamma, target_name,
-        savepath=f"jko_image_convergence_{target_name}.png"
+        savepath=f"images/jko_image_convergence_{target_name}.png"
     )
 
     print_summary(
         res_std, res_acc, args.gamma, args.blocks, target_name,
-        savepath=f"jko_image_summary_{target_name}.txt"
+        savepath=f"results/jko_image_summary_{target_name}.txt"
     )
 
     print("\nDone.")

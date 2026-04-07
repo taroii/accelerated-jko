@@ -24,13 +24,17 @@ Usage:
     pip install torch geomloss matplotlib
     python jko_neural_experiment.py
 
-Outputs (saved to current directory):
-    neural_jko_convergence.png
-    neural_jko_stepsize.png
-    neural_jko_summary.txt
+Outputs (saved to images/):
+    images/neural_jko_convergence.png
+    images/neural_jko_stepsize.png
+    results/neural_jko_summary.txt
 """
 
+import os
 import time
+
+os.makedirs("images", exist_ok=True)
+os.makedirs("results", exist_ok=True)
 import math
 import warnings
 import numpy as np
@@ -607,7 +611,107 @@ def print_summary(res_std, res_acc, gamma, N_blocks, savepath=None):
 
 
 # ─────────────────────────────────────────────────────────────
-# 14.  MAIN
+# 14.5  DEPTH SWEEP PLOTTING
+# ─────────────────────────────────────────────────────────────
+
+def plot_depth_sweep(N_list, kl_std_finals, kl_acc_finals, ratios,
+                     savepath=None):
+    """Two-panel plot: final KL vs N (semilogy) and KL ratio vs N."""
+    fig, axs = plt.subplots(1, 2, figsize=(13, 5))
+    fig.suptitle(r"Block Depth Sweep — Neural JKO (8-Gaussian, $\gamma=0.5$)",
+                 fontsize=13)
+
+    N_arr = np.array(N_list, dtype=float)
+
+    # ── Left: final KL vs N ──────────────────────────────────
+    ax = axs[0]
+    ax.semilogy(N_list, kl_std_finals, "o-", color=BLUE, lw=2,
+                label="Standard JKO")
+    ax.semilogy(N_list, kl_acc_finals, "o-", color=RED, lw=2,
+                label="Accelerated JKO")
+    # reference lines
+    c1 = kl_std_finals[0] * N_arr[0]
+    ax.semilogy(N_arr, c1 / N_arr, "k:", lw=1.2, alpha=0.6,
+                label=r"$O(1/N)$ ref")
+    c2 = kl_acc_finals[0] * N_arr[0]**2
+    ax.semilogy(N_arr, c2 / N_arr**2, "k-.", lw=1.2, alpha=0.6,
+                label=r"$O(1/N^2)$ ref")
+    ax.set_xlabel("Number of JKO blocks (N)")
+    ax.set_ylabel(r"Final $\mathrm{KL}(p_N \| q)$ + const")
+    ax.set_title("Final KL vs Depth")
+    ax.legend(fontsize=9)
+    ax.grid(True, which="both", ls=":", alpha=0.4)
+
+    # ── Right: ratio vs N ────────────────────────────────────
+    ax = axs[1]
+    ax.plot(N_list, ratios, "s-", color="black", lw=2,
+            label=r"$\mathrm{KL}_{\mathrm{std}} / \mathrm{KL}_{\mathrm{acc}}$")
+    # O(N) reference
+    c_r = ratios[0] / N_arr[0]
+    ax.plot(N_arr, c_r * N_arr, "k--", lw=1.2, alpha=0.6,
+            label=r"$O(N)$ ref")
+    ax.set_xlabel("Number of JKO blocks (N)")
+    ax.set_ylabel("KL ratio  (Standard / Accelerated)")
+    ax.set_title("Acceleration Advantage vs Depth")
+    ax.legend(fontsize=9)
+    ax.grid(True, ls=":", alpha=0.4)
+
+    plt.tight_layout()
+    if savepath:
+        plt.savefig(savepath, dpi=150, bbox_inches="tight")
+        print(f"Saved: {savepath}")
+    plt.show()
+
+
+# ─────────────────────────────────────────────────────────────
+# 14.6  FIXED BUDGET PLOTTING
+# ─────────────────────────────────────────────────────────────
+
+def plot_fixed_budget(configs, kl_std_finals, kl_acc_finals,
+                      w2_std_finals, w2_acc_finals, total_budget,
+                      savepath=None):
+    """Two-panel plot for fixed-budget experiment."""
+    fig, axs = plt.subplots(1, 2, figsize=(13, 5))
+    fig.suptitle(
+        rf"Fixed Compute Budget ($N \times \mathrm{{epochs}}={total_budget}$)"
+        r" — Neural JKO",
+        fontsize=13)
+
+    N_list = [c[0] for c in configs]
+
+    # ── Left: final KL vs N_blocks ───────────────────────────
+    ax = axs[0]
+    ax.semilogy(N_list, kl_std_finals, "o-", color=BLUE, lw=2,
+                label="Standard JKO")
+    ax.semilogy(N_list, kl_acc_finals, "o-", color=RED, lw=2,
+                label="Accelerated JKO")
+    ax.set_xlabel("N_blocks  (epochs/block decreases →)")
+    ax.set_ylabel(r"Final $\mathrm{KL}(p_N \| q)$ + const")
+    ax.set_title("Final KL vs Block Count")
+    ax.legend(fontsize=9)
+    ax.grid(True, which="both", ls=":", alpha=0.4)
+
+    # ── Right: final W2 vs N_blocks ──────────────────────────
+    ax = axs[1]
+    ax.plot(N_list, w2_std_finals, "o-", color=BLUE, lw=2,
+            label="Standard JKO")
+    ax.plot(N_list, w2_acc_finals, "o-", color=RED, lw=2,
+            label="Accelerated JKO")
+    ax.set_xlabel("N_blocks  (epochs/block decreases →)")
+    ax.set_ylabel(r"Final $W_2(p_N, q)$  [" + W2_METHOD + "]")
+    ax.set_title("Final W2 vs Block Count")
+    ax.legend(fontsize=9)
+    ax.grid(True, ls=":", alpha=0.4)
+
+    plt.tight_layout()
+    if savepath:
+        plt.savefig(savepath, dpi=150, bbox_inches="tight")
+        print(f"Saved: {savepath}")
+    plt.show()
+
+
+# ─────────────────────────────────────────────────────────────
+# 15.  MAIN
 # ─────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -634,11 +738,11 @@ if __name__ == "__main__":
         res_std, res_acc,
         gamma=GAMMA, N_blocks=N_BLOCKS,
         title_prefix=rf"8-Gaussian mixture, $\gamma={GAMMA}$",
-        savepath="neural_jko_convergence.png"
+        savepath="images/neural_jko_convergence.png"
     )
 
     print_summary(res_std, res_acc, GAMMA, N_BLOCKS,
-                  savepath="neural_jko_summary.txt")
+                  savepath="results/neural_jko_summary.txt")
 
     # ── Experiment 2: Step-size sensitivity ─────────────────
     print("\n" + "="*60)
@@ -651,7 +755,7 @@ if __name__ == "__main__":
 
     plot_stepsize_sensitivity(
         stepsize_results, GAMMAS_SWEEP, N_blocks=8,
-        savepath="neural_jko_stepsize.png"
+        savepath="images/neural_jko_stepsize.png"
     )
 
     # ── Experiment 3: Particle visualization ────────────────
@@ -680,6 +784,124 @@ if __name__ == "__main__":
             snap_labels.append(f"t={t+1}  (Acc JKO)")
 
     plot_particles(snaps, snap_labels, TARGET,
-                   savepath="neural_jko_particles.png")
+                   savepath="images/neural_jko_particles.png")
 
     print("\nAll experiments complete.")
+
+    # ── Experiment 4: Block Depth Sweep ────────────────────────
+    print("\n" + "="*60)
+    print("EXPERIMENT 4: Block Depth Sweep")
+    print("="*60)
+
+    N_blocks_list = [4, 8, 12, 16, 24]
+    depth_gamma     = 0.5
+    depth_particles = 1500
+    depth_epochs    = 200
+    depth_seed      = 42
+
+    kl_std_finals = []
+    kl_acc_finals = []
+    w2_std_finals_depth = []
+    w2_acc_finals_depth = []
+    ratios = []
+
+    for Nb in N_blocks_list:
+        print(f"\n--- N_blocks = {Nb} ---")
+        print("  Standard JKO:")
+        r_std = run_standard_jko_neural(
+            depth_gamma, Nb, depth_particles, depth_epochs, TARGET,
+            seed=depth_seed)
+        print("  Accelerated JKO:")
+        r_acc = run_accelerated_jko_neural(
+            depth_gamma, Nb, depth_particles, depth_epochs, TARGET,
+            seed=depth_seed)
+
+        kl_std_finals.append(r_std["kl"][-1])
+        kl_acc_finals.append(r_acc["kl"][-1])
+        w2_std_finals_depth.append(r_std["w2"][-1])
+        w2_acc_finals_depth.append(r_acc["w2"][-1])
+        ratio = r_std["kl"][-1] / max(r_acc["kl"][-1], 1e-12)
+        ratios.append(ratio)
+
+    plot_depth_sweep(N_blocks_list, kl_std_finals, kl_acc_finals, ratios,
+                     savepath="images/depth_sweep_neural.png")
+
+    # Print and save summary table
+    depth_lines = []
+    depth_lines.append("=" * 72)
+    depth_lines.append("DEPTH SWEEP SUMMARY   γ=0.5, particles=1500, epochs=200")
+    depth_lines.append("=" * 72)
+    depth_lines.append(
+        f"{'N_blocks':>10}  {'KL_std':>12}  {'KL_acc':>12}  "
+        f"{'W2_std':>12}  {'W2_acc':>12}  {'Ratio':>10}")
+    depth_lines.append("-" * 72)
+    for i, Nb in enumerate(N_blocks_list):
+        depth_lines.append(
+            f"{Nb:>10d}  {kl_std_finals[i]:>12.4f}  {kl_acc_finals[i]:>12.4f}  "
+            f"{w2_std_finals_depth[i]:>12.4f}  {w2_acc_finals_depth[i]:>12.4f}  "
+            f"{ratios[i]:>10.2f}")
+    depth_lines.append("=" * 72)
+    depth_text = "\n".join(depth_lines)
+    print("\n" + depth_text)
+    with open("results/depth_sweep_neural.txt", "w") as f:
+        f.write(depth_text)
+    print("Saved: results/depth_sweep_neural.txt")
+
+    # ── Experiment 5: Fixed Compute Budget ─────────────────────
+    print("\n" + "="*60)
+    print("EXPERIMENT 5: Fixed Compute Budget")
+    print("="*60)
+
+    total_budget = 3600
+    budget_configs = [(6, 600), (12, 300), (18, 200), (24, 150), (36, 100)]
+    budget_gamma     = 0.5
+    budget_particles = 1500
+    budget_seed      = 42
+
+    kl_std_budget = []
+    kl_acc_budget = []
+    w2_std_budget = []
+    w2_acc_budget = []
+
+    for Nb, ne in budget_configs:
+        print(f"\n--- N_blocks={Nb}, epochs={ne} (budget={Nb*ne}) ---")
+        print("  Standard JKO:")
+        r_std = run_standard_jko_neural(
+            budget_gamma, Nb, budget_particles, ne, TARGET,
+            seed=budget_seed)
+        print("  Accelerated JKO:")
+        r_acc = run_accelerated_jko_neural(
+            budget_gamma, Nb, budget_particles, ne, TARGET,
+            seed=budget_seed)
+
+        kl_std_budget.append(r_std["kl"][-1])
+        kl_acc_budget.append(r_acc["kl"][-1])
+        w2_std_budget.append(r_std["w2"][-1])
+        w2_acc_budget.append(r_acc["w2"][-1])
+
+    plot_fixed_budget(budget_configs, kl_std_budget, kl_acc_budget,
+                      w2_std_budget, w2_acc_budget, total_budget,
+                      savepath="images/fixed_budget_neural.png")
+
+    # Print and save summary table
+    budget_lines = []
+    budget_lines.append("=" * 72)
+    budget_lines.append(
+        f"FIXED BUDGET SUMMARY   N×epochs={total_budget}, "
+        f"γ=0.5, particles=1500")
+    budget_lines.append("=" * 72)
+    budget_lines.append(
+        f"{'N_blocks':>10}  {'epochs':>8}  {'KL_std':>12}  {'KL_acc':>12}  "
+        f"{'W2_std':>12}  {'W2_acc':>12}")
+    budget_lines.append("-" * 72)
+    for i, (Nb, ne) in enumerate(budget_configs):
+        budget_lines.append(
+            f"{Nb:>10d}  {ne:>8d}  {kl_std_budget[i]:>12.4f}  "
+            f"{kl_acc_budget[i]:>12.4f}  {w2_std_budget[i]:>12.4f}  "
+            f"{w2_acc_budget[i]:>12.4f}")
+    budget_lines.append("=" * 72)
+    budget_text = "\n".join(budget_lines)
+    print("\n" + budget_text)
+    with open("results/fixed_budget_neural.txt", "w") as f:
+        f.write(budget_text)
+    print("Saved: results/fixed_budget_neural.txt")

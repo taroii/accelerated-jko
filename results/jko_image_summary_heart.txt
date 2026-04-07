@@ -1,0 +1,19 @@
+=================================================================
+IMAGE DENSITY JKO SUMMARY
+Target: heart   gamma=0.08   blocks=25
+=================================================================
+
+Initial  KL proxy : 12.2833
+Final    KL proxy -- Standard JKO   : 1.2743
+Final    KL proxy -- Accelerated JKO: 0.8307
+
+Final    W2       -- Standard JKO   : 0.8706
+Final    W2       -- Accelerated JKO: 0.9960
+
+Target fraction               Std blocks    Acc blocks
+  KL < 90% of initial range               1               1
+  KL < 75% of initial range               1               1
+  KL < 50% of initial range               1               1
+  KL < 25% of initial range               1               1
+
+=================================================================
