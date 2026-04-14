@@ -1,7 +1,9 @@
 numpy
 matplotlib
-torch
-torchvision
 geomloss
 pillow
 scipy
+tqdm
+argparse
+torchmetrics
+torch-fidelity

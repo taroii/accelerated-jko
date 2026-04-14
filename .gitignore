@@ -1,2 +1,9 @@
 notes/
 __pycache__/
+.vscode/
+data/
+.claude/
+
+*.pt
+MNISTDiffusion/
+mnist_data/
