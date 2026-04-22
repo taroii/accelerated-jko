@@ -9,3 +9,5 @@ temp/
 *.pt
 MNISTDiffusion/
 mnist_data/
+
+old/

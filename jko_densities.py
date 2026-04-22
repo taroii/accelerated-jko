@@ -1,25 +1,3 @@
-"""
-Particle Transport Visualization: Standard vs Accelerated JKO
-==============================================================
-Target densities : "bunny", "rings", "rectangle", "disk", "outer_ring" (all built-in).
-Source           : N(0, 1.5^2 * I) in R^2.
-Params           : gamma=0.08, 25 blocks, 12000 particles, 800 epochs/block.
-
-For each target produces one figure:
-  images/particles_bunny.png
-  images/particles_rings.png
-  images/particles_rectangle.png
-  images/particles_disk.png
-  images/particles_outer_ring.png
-
-Figure layout: 2 rows (Standard JKO / Accelerated JKO) x 5 columns
-(blocks 0, N//4, N//2, 3N//4, N). Background shows target density heatmap.
-Particles are rendered as small semi-transparent dots sized for visibility.
-
-Particles are increased to 12000 (vs 5000 default) and rendered at s=4
-with alpha=0.25 so the shape is clear without overplotting.
-"""
-
 import argparse
 import os
 import time
@@ -33,6 +11,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.func import jacrev, vmap
+from geomloss import SamplesLoss
 
 warnings.filterwarnings("ignore")
 matplotlib.rcParams.update({"font.size": 10})
@@ -44,10 +23,7 @@ print(f"Device: {DEVICE}")
 BLUE = "#1f77b4"
 RED  = "#d62728"
 
-# ------------------------------------------------------------------
 #  Built-in target densities
-# ------------------------------------------------------------------
-
 def _grid(res=256):
     lin = np.linspace(-1, 1, res)
     return np.meshgrid(lin, lin)
@@ -105,10 +81,7 @@ BUILTIN = {
     "outer_ring": density_outer_ring,
 }
 
-# ------------------------------------------------------------------
 #  Image density class
-# ------------------------------------------------------------------
-
 class ImageDensity2D:
     def __init__(self, arr, device=DEVICE):
         res = arr.shape[0]
@@ -144,10 +117,7 @@ class ImageDensity2D:
         )
         return out.squeeze()
 
-# ------------------------------------------------------------------
 #  Transport map
-# ------------------------------------------------------------------
-
 class TransportMap(nn.Module):
     def __init__(self, hidden=256):
         super().__init__()
@@ -191,32 +161,45 @@ def train_block(y, gamma, target, n_epochs=800, lr=2e-3, batch=1024, hidden=256)
         opt.step(); sch.step()
     return T
 
-# ------------------------------------------------------------------
-#  Run standard JKO
-# ------------------------------------------------------------------
+#  Sinkhorn W_2 estimator (geomloss)
+_SINK = SamplesLoss("sinkhorn", p=2, blur=0.01, scaling=0.95)
 
-def run_standard_jko(target, gamma, n_blocks, n_particles, n_epochs, seed=0):
+
+def w2_to_target(x, y_ref):
+    """Sinkhorn-based W_2 between particles x and a fixed reference sample from q."""
+    with torch.no_grad():
+        if x.shape[0] > y_ref.shape[0]:
+            idx = torch.randperm(x.shape[0], device=x.device)[:y_ref.shape[0]]
+            x_ = x[idx]
+        else:
+            x_ = x
+        val = _SINK(x_.contiguous(), y_ref.contiguous())
+    return float(val.clamp(min=0).sqrt())
+
+#  Run standard JKO
+def run_standard_jko(target, gamma, n_blocks, n_particles, n_epochs, seed=0, y_ref=None):
     torch.manual_seed(seed); np.random.seed(seed)
     x = torch.randn(n_particles, 2, device=DEVICE) * 1.5
     snaps = [x.detach().clone()]
+    w2s   = [w2_to_target(x, y_ref)]
     t0 = time.time()
     for k in range(n_blocks):
         T = train_block(x, gamma, target, n_epochs=n_epochs)
         with torch.no_grad():
             x = T(x).clamp(-2.5, 2.5)
         snaps.append(x.detach().clone())
-        print(f"  [Std  {k+1:2d}/{n_blocks}]  {time.time()-t0:.0f}s")
-    return snaps
+        w2s.append(w2_to_target(x, y_ref))
+        print(f"  [Std  {k+1:2d}/{n_blocks}]  W2={w2s[-1]:.4f}  {time.time()-t0:.0f}s")
+    return snaps, w2s
 
-# ------------------------------------------------------------------
 #  Run accelerated JKO
-# ------------------------------------------------------------------
 
-def run_accelerated_jko(target, gamma, n_blocks, n_particles, n_epochs, seed=0):
+def run_accelerated_jko(target, gamma, n_blocks, n_particles, n_epochs, seed=0, y_ref=None):
     torch.manual_seed(seed); np.random.seed(seed)
     x = torch.randn(n_particles, 2, device=DEVICE) * 1.5
     z = x.clone()
     snaps = [x.detach().clone()]
+    w2s   = [w2_to_target(x, y_ref)]
     t0 = time.time()
     for t in range(n_blocks):
         alpha = 3.0 / (t + 3.0)
@@ -227,25 +210,25 @@ def run_accelerated_jko(target, gamma, n_blocks, n_particles, n_epochs, seed=0):
             z_new = (z + (x_new - y) / alpha).clamp(-3.5, 3.5)
         x = x_new.detach(); z = z_new.detach()
         snaps.append(x.clone())
-        print(f"  [Acc  {t+1:2d}/{n_blocks}]  alpha={alpha:.3f}  {time.time()-t0:.0f}s")
-    return snaps
+        w2s.append(w2_to_target(x, y_ref))
+        print(f"  [Acc  {t+1:2d}/{n_blocks}]  alpha={alpha:.3f}  W2={w2s[-1]:.4f}  {time.time()-t0:.0f}s")
+    return snaps, w2s
 
-# ------------------------------------------------------------------
 #  Plot
-# ------------------------------------------------------------------
-
-def plot_particles(snaps_std, snaps_acc, target, n_blocks, savepath):
+def plot_particles(snaps_std, snaps_acc, w2_std, w2_acc, target, n_blocks, savepath):
     snap_idx = sorted({0, n_blocks//4, n_blocks//2, 3*n_blocks//4, n_blocks})
     n_cols   = len(snap_idx)
     dens     = target.density
 
-    fig = plt.figure(figsize=(3.0 * n_cols, 6.0))
-    gs  = gridspec.GridSpec(2, n_cols, figure=fig, hspace=0.05, wspace=0.05)
+    fig = plt.figure(figsize=(3.0 * n_cols, 8.0))
+    gs  = gridspec.GridSpec(3, n_cols, figure=fig,
+                            height_ratios=[1, 1, 0.55],
+                            hspace=0.12, wspace=0.05)
 
-    rows = [("Standard JKO", snaps_std, BLUE),
-            ("Accelerated JKO", snaps_acc, RED)]
+    rows = [("Standard JKO",    snaps_std, w2_std, BLUE),
+            ("Accelerated JKO", snaps_acc, w2_acc, RED)]
 
-    for row, (label, snaps, color) in enumerate(rows):
+    for row, (label, snaps, w2s, color) in enumerate(rows):
         for ci, si in enumerate(snap_idx):
             ax = fig.add_subplot(gs[row, ci])
             ax.imshow(dens, extent=[-1, 1, -1, 1], origin="lower",
@@ -255,6 +238,10 @@ def plot_particles(snaps_std, snaps_acc, target, n_blocks, savepath):
             pts = snaps[si].cpu().numpy()
             ax.scatter(pts[:, 0], pts[:, 1],
                        s=4, alpha=0.25, color=color, linewidths=0)
+            ax.text(0.97, 0.97, f"$W_2$ = {w2s[si]:.3f}",
+                    transform=ax.transAxes, ha="right", va="top", fontsize=9,
+                    bbox=dict(facecolor="white", alpha=0.8,
+                              edgecolor="none", pad=1.8))
             if row == 0:
                 ax.set_title(f"Block {si}", fontsize=9, pad=3)
             if ci == 0:
@@ -262,27 +249,41 @@ def plot_particles(snaps_std, snaps_acc, target, n_blocks, savepath):
             ax.set_xlim(-1.1, 1.1); ax.set_ylim(-1.1, 1.1)
             ax.set_xticks([]); ax.set_yticks([])
 
+    ax_c = fig.add_subplot(gs[2, :])
+    t = np.arange(n_blocks + 1)
+    ax_c.semilogy(t, w2_std, color=BLUE, lw=1.8, label="Standard JKO")
+    ax_c.semilogy(t, w2_acc, color=RED,  lw=1.8, label="Accelerated JKO")
+    for si in snap_idx:
+        ax_c.axvline(si, color="gray", ls=":", alpha=0.35, lw=0.8)
+    ax_c.set_xlabel("Block $t$", fontsize=10)
+    ax_c.set_ylabel(r"$W_2(\rho_t,\, q)$", fontsize=10)
+    ax_c.legend(fontsize=9, loc="upper right")
+    ax_c.grid(True, which="both", ls=":", alpha=0.35)
+    ax_c.set_xlim(0, n_blocks)
+
     plt.tight_layout()
     fig.savefig(savepath, dpi=160, bbox_inches="tight")
     print(f"Saved: {savepath}")
 
-# ------------------------------------------------------------------
 #  Main
-# ------------------------------------------------------------------
-
 def run(target_name, gamma=0.08, n_blocks=25, n_particles=12000,
         n_epochs=800, seed=0):
     arr    = BUILTIN[target_name]()
     target = ImageDensity2D(arr)
     print(f"\n=== {target_name} ===")
 
+    np.random.seed(seed + 777)
+    y_ref = target.sample(4096)
+
     print("Standard JKO...")
-    snaps_std = run_standard_jko(target, gamma, n_blocks, n_particles, n_epochs, seed)
+    snaps_std, w2_std = run_standard_jko(
+        target, gamma, n_blocks, n_particles, n_epochs, seed, y_ref=y_ref)
 
     print("Accelerated JKO...")
-    snaps_acc = run_accelerated_jko(target, gamma, n_blocks, n_particles, n_epochs, seed)
+    snaps_acc, w2_acc = run_accelerated_jko(
+        target, gamma, n_blocks, n_particles, n_epochs, seed, y_ref=y_ref)
 
-    plot_particles(snaps_std, snaps_acc, target, n_blocks,
+    plot_particles(snaps_std, snaps_acc, w2_std, w2_acc, target, n_blocks,
                    savepath=f"images/particles_{target_name}.png")
 
 
@@ -302,4 +303,3 @@ if __name__ == "__main__":
     for t in targets:
         run(t, args.gamma, args.blocks, args.particles, args.epochs, args.seed)
 
-    print("\nDone.")

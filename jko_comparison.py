@@ -1,25 +1,3 @@
-"""
-Empirical Convergence: Standard JKO vs Accelerated JKO
-=======================================================
-Produces two publication-quality figures for the paper.
-
-Figure 1  --  images/figure_1.png
-  Two-panel convergence comparison on 1-D Gaussians (closed-form proximal steps).
-  Panel (a): Weakly convex target (lam=0.04, q=N(0,5)).
-             Log-log scale; dashed curves are the theoretical bounds.
-             Standard JKO tracks O(t^-1); accelerated JKO tracks O(t^-2).
-  Panel (b): Strongly convex target (lam=1, q=N(0,1)).
-             Log-linear scale; standard JKO's exponential rate dominates.
-
-Figure 2  --  images/figure_2.png
-  Two-panel figure showing how the acceleration advantage scales with depth and lambda.
-  Panel (a): Final KL vs number of blocks N (lam=0.04, gamma=0.5).
-             Standard JKO tracks O(1/N); accelerated JKO tracks O(1/N^2).
-  Panel (b): Final KL vs lambda after N=200 blocks (gamma=0.5).
-             Standard JKO diverges as O(lambda^-2) as lambda->0;
-             accelerated JKO remains flat (lambda-independent floor).
-"""
-
 import os
 import numpy as np
 import matplotlib.pyplot as plt
@@ -28,17 +6,12 @@ import matplotlib.ticker as mticker
 os.makedirs("images", exist_ok=True)
 os.makedirs("results", exist_ok=True)
 
-# ------------------------------------------------------------------
 #  Colour palette  (consistent across all figures)
-# ------------------------------------------------------------------
 BLUE  = "#1f77b4"   # standard JKO
 RED   = "#d62728"   # accelerated JKO
 GREY  = "#888888"   # reference lines
 
-# ------------------------------------------------------------------
 #  1.  CLOSED-FORM GAUSSIAN UTILITIES
-# ------------------------------------------------------------------
-
 def kl_gaussian(m, s, sigma_q=1.0):
     """KL( N(m,s^2) || N(0,sigma_q^2) )."""
     r = s / sigma_q
@@ -57,10 +30,7 @@ def w2_sq_1d(m1, s1, m2=0.0, s2=1.0):
     return (m1 - m2)**2 + (s1 - s2)**2
 
 
-# ------------------------------------------------------------------
 #  2.  ALGORITHM RUNNERS
-# ------------------------------------------------------------------
-
 def run_standard_jko(m0, s0, gamma, lam, n_steps):
     sigma_q = 1.0 / np.sqrt(lam)
     m, s    = float(m0), float(s0)
@@ -90,10 +60,7 @@ def run_accelerated_jko(m0, s0, gamma, lam, n_steps):
     return np.array(G_vals)
 
 
-# ------------------------------------------------------------------
 #  3.  THEORETICAL BOUNDS
-# ------------------------------------------------------------------
-
 def bound_std(G0, W2sq_0, gamma, lam, n_steps):
     n   = np.arange(n_steps + 1)
     rho = 1.0 / (1.0 + gamma * lam / 2.0)
@@ -106,166 +73,129 @@ def bound_acc(G0, W2sq_0, gamma, n_steps):
     return np.where(t == 0, G0, 9.0 * Delta0 / (t + 2)**2)
 
 
-# ------------------------------------------------------------------
-#  4.  SHARED EXPERIMENT PARAMETERS
-# ------------------------------------------------------------------
-m0, s0  = 5.0, 2.5
-GAMMA   = 0.5
+if __name__ == "__main__":
+    #  4.  SHARED EXPERIMENT PARAMETERS
+    m0, s0  = 5.0, 2.5
+    GAMMA   = 0.5
 
-# ==================================================================
-#  FIGURE 1 -- Main comparison (3 panels)
-# ==================================================================
+    #  FIGURE 1
+    N_WEAK   = 300   # enough iterations to show clear slope difference
+    N_STRONG = 49    # exponential needs fewer steps to converge
 
-N_WEAK   = 300   # enough iterations to show clear slope difference
-N_STRONG = 49    # exponential needs fewer steps to converge
+    lam_weak   = 0.04
+    lam_strong = 1.0
 
-lam_weak   = 0.04
-lam_strong = 1.0
+    sigma_weak   = 1.0 / np.sqrt(lam_weak)
+    sigma_strong = 1.0 / np.sqrt(lam_strong)
 
-sigma_weak   = 1.0 / np.sqrt(lam_weak)
-sigma_strong = 1.0 / np.sqrt(lam_strong)
+    G_std_w  = run_standard_jko(m0, s0, GAMMA, lam_weak,   N_WEAK)
+    G_acc_w  = run_accelerated_jko(m0, s0, GAMMA, lam_weak,   N_WEAK)
+    G_std_s  = run_standard_jko(m0, s0, GAMMA, lam_strong, N_STRONG)
+    G_acc_s  = run_accelerated_jko(m0, s0, GAMMA, lam_strong, N_STRONG)
 
-G_std_w  = run_standard_jko(m0, s0, GAMMA, lam_weak,   N_WEAK)
-G_acc_w  = run_accelerated_jko(m0, s0, GAMMA, lam_weak,   N_WEAK)
-G_std_s  = run_standard_jko(m0, s0, GAMMA, lam_strong, N_STRONG)
-G_acc_s  = run_accelerated_jko(m0, s0, GAMMA, lam_strong, N_STRONG)
+    G0_w    = kl_gaussian(m0, s0, sigma_weak)
+    W2sq_w  = w2_sq_1d(m0, s0, 0.0, sigma_weak)
+    G0_s    = kl_gaussian(m0, s0, sigma_strong)
+    W2sq_s  = w2_sq_1d(m0, s0, 0.0, sigma_strong)
 
-G0_w    = kl_gaussian(m0, s0, sigma_weak)
-W2sq_w  = w2_sq_1d(m0, s0, 0.0, sigma_weak)
-G0_s    = kl_gaussian(m0, s0, sigma_strong)
-W2sq_s  = w2_sq_1d(m0, s0, 0.0, sigma_strong)
+    b_std_w = bound_std(G0_w, W2sq_w, GAMMA, lam_weak,   N_WEAK)
+    b_acc_w = bound_acc(G0_w, W2sq_w, GAMMA, N_WEAK)
+    b_std_s = bound_std(G0_s, W2sq_s, GAMMA, lam_strong, N_STRONG)
+    b_acc_s = bound_acc(G0_s, W2sq_s, GAMMA, N_STRONG)
 
-b_std_w = bound_std(G0_w, W2sq_w, GAMMA, lam_weak,   N_WEAK)
-b_acc_w = bound_acc(G0_w, W2sq_w, GAMMA, N_WEAK)
-b_std_s = bound_std(G0_s, W2sq_s, GAMMA, lam_strong, N_STRONG)
-b_acc_s = bound_acc(G0_s, W2sq_s, GAMMA, N_STRONG)
+    # Depth sweep for Panel C
+    N_list      = [4, 8, 16, 32, 64, 128]
+    N_arr       = np.array(N_list, dtype=float)
+    G_std_final = []
+    G_acc_final = []
+    for N in N_list:
+        G_std_final.append(run_standard_jko(m0, s0, GAMMA, lam_weak, N)[-1])
+        G_acc_final.append(run_accelerated_jko(m0, s0, GAMMA, lam_weak, N)[-1])
+    G_std_final = np.array(G_std_final)
+    G_acc_final = np.array(G_acc_final)
+    depth_ratio = G_std_final / G_acc_final
 
-# Depth sweep for Panel C
-N_list      = [4, 8, 16, 32, 64, 128]
-N_arr       = np.array(N_list, dtype=float)
-G_std_final = []
-G_acc_final = []
-for N in N_list:
-    G_std_final.append(run_standard_jko(m0, s0, GAMMA, lam_weak, N)[-1])
-    G_acc_final.append(run_accelerated_jko(m0, s0, GAMMA, lam_weak, N)[-1])
-G_std_final = np.array(G_std_final)
-G_acc_final = np.array(G_acc_final)
-depth_ratio = G_std_final / G_acc_final
+    # plot
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.5))
 
-# ---- plot ----
-fig, axes = plt.subplots(1, 2, figsize=(10, 4.5))
+    # Panel A: weakly convex, log-log
+    ax = axes[0]
+    iters_w = np.arange(1, N_WEAK + 1)   # skip t=0 for log-log
+    ax.loglog(iters_w, G_std_w[1:],  color=BLUE, lw=2,   label="Standard JKO")
+    ax.loglog(iters_w, G_acc_w[1:],  color=RED,  lw=2,   label="Accelerated JKO")
+    ax.loglog(iters_w, b_std_w[1:], "--", color=BLUE, lw=1.2, alpha=0.5,
+              label=r"Std bound $\propto t^{-1}$")
+    ax.loglog(iters_w, b_acc_w[1:], "--", color=RED,  lw=1.2, alpha=0.5,
+              label=r"Acc bound $\propto t^{-2}$")
+    ax.set_xlabel("Block $t$", fontsize=11)
+    ax.set_ylabel(r"$\mathrm{KL}(\rho_t \| q)$", fontsize=11)
+    ax.set_title(r"(a) $\lambda = 0.04$", fontsize=11)
+    ax.legend(fontsize=8, loc="lower left")
+    ax.grid(True, which="both", ls=":", alpha=0.35)
 
-# Panel A: weakly convex, log-log (slope verification)
-ax = axes[0]
-iters_w = np.arange(1, N_WEAK + 1)   # skip t=0 for log-log
-ax.loglog(iters_w, G_std_w[1:],  color=BLUE, lw=2,   label="Standard JKO")
-ax.loglog(iters_w, G_acc_w[1:],  color=RED,  lw=2,   label="Accelerated JKO")
-ax.loglog(iters_w, b_std_w[1:], "--", color=BLUE, lw=1.2, alpha=0.5,
-          label=r"Std bound $\propto t^{-1}$")
-ax.loglog(iters_w, b_acc_w[1:], "--", color=RED,  lw=1.2, alpha=0.5,
-          label=r"Acc bound $\propto t^{-2}$")
-ax.set_xlabel("Block $t$", fontsize=11)
-ax.set_ylabel(r"$\mathrm{KL}(\rho_t \| q)$", fontsize=11)
-ax.set_title(r"(a) $\lambda = 0.04$", fontsize=11)
-ax.legend(fontsize=8, loc="lower left")
-ax.grid(True, which="both", ls=":", alpha=0.35)
+    # Panel B: strongly convex, log-linear
+    ax = axes[1]
+    iters_s = np.arange(N_STRONG + 1)
+    ax.semilogy(iters_s, G_std_s,  color=BLUE, lw=2,   label="Standard JKO")
+    ax.semilogy(iters_s, G_acc_s,  color=RED,  lw=2,   label="Accelerated JKO")
+    ax.semilogy(iters_s[1:], b_std_s[1:], "--", color=BLUE, lw=1.2, alpha=0.5,
+                label=r"Std bound $\propto e^{-\gamma\lambda n/2}$")
+    ax.semilogy(iters_s[1:], b_acc_s[1:], "--", color=RED,  lw=1.2, alpha=0.5,
+                label=r"Acc bound $\propto t^{-2}$")
+    ax.set_xlabel("Block $t$", fontsize=11)
+    ax.set_ylabel(r"$\mathrm{KL}(\rho_t \| q)$", fontsize=11)
+    ax.set_title(r"(b) $\lambda = 1$", fontsize=11)
+    ax.legend(fontsize=8, loc="upper right")
+    ax.grid(True, which="both", ls=":", alpha=0.35)
 
-# Panel B: strongly convex, log-linear
-ax = axes[1]
-iters_s = np.arange(N_STRONG + 1)
-ax.semilogy(iters_s, G_std_s,  color=BLUE, lw=2,   label="Standard JKO")
-ax.semilogy(iters_s, G_acc_s,  color=RED,  lw=2,   label="Accelerated JKO")
-ax.semilogy(iters_s[1:], b_std_s[1:], "--", color=BLUE, lw=1.2, alpha=0.5,
-            label=r"Std bound $\propto e^{-\gamma\lambda n/2}$")
-ax.semilogy(iters_s[1:], b_acc_s[1:], "--", color=RED,  lw=1.2, alpha=0.5,
-            label=r"Acc bound $\propto t^{-2}$")
-ax.set_xlabel("Block $t$", fontsize=11)
-ax.set_ylabel(r"$\mathrm{KL}(\rho_t \| q)$", fontsize=11)
-ax.set_title(r"(b) $\lambda = 1$", fontsize=11)
-ax.legend(fontsize=8, loc="upper right")
-ax.grid(True, which="both", ls=":", alpha=0.35)
-
-plt.tight_layout()
-fig.savefig("images/figure_1.png", dpi=160, bbox_inches="tight")
-print("Saved: images/figure_1.png")
+    plt.tight_layout()
+    fig.savefig("images/figure_1.png", dpi=160, bbox_inches="tight")
 
 
-# ==================================================================
-#  FIGURE 2 -- Depth scaling + error-floor scaling  (2 panels)
-# ==================================================================
-# Panel A: depth sweep  (log-log, final KL vs N)
-# Panel B: error-floor scaling with lambda  (log-log, final KL vs lambda)
+    #  FIGURE 2
+    # Panel A: depth sweep  (log-log, final KL vs N)
+    # Panel B: error-floor scaling with lambda  (log-log, final KL vs lambda)
+    N_FLOOR   = 200
+    lam_vals  = np.array([1.0, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001])
 
-N_FLOOR   = 200
-lam_vals  = np.array([1.0, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001])
+    G_std_floors = []
+    G_acc_floors = []
+    for lv in lam_vals:
+        G_std_floors.append(run_standard_jko(m0, s0, GAMMA, lv, N_FLOOR)[-1])
+        G_acc_floors.append(run_accelerated_jko(m0, s0, GAMMA, lv, N_FLOOR)[-1])
 
-G_std_floors = []
-G_acc_floors = []
-for lv in lam_vals:
-    G_std_floors.append(run_standard_jko(m0, s0, GAMMA, lv, N_FLOOR)[-1])
-    G_acc_floors.append(run_accelerated_jko(m0, s0, GAMMA, lv, N_FLOOR)[-1])
+    G_std_floors = np.array(G_std_floors)
+    G_acc_floors = np.array(G_acc_floors)
+    floor_ratio  = G_std_floors / G_acc_floors
 
-G_std_floors = np.array(G_std_floors)
-G_acc_floors = np.array(G_acc_floors)
-floor_ratio  = G_std_floors / G_acc_floors
+    fig2, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.5))
 
-fig2, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.5))
+    # Panel A: depth sweep
+    ax1.loglog(N_arr, G_std_final, "o-", color=BLUE, lw=2, label="Standard JKO")
+    ax1.loglog(N_arr, G_acc_final, "s-", color=RED,  lw=2, label="Accelerated JKO")
+    ref = N_arr / N_arr[0]
+    ax1.loglog(N_arr, G_std_final[0] / ref,    "--", color=BLUE, lw=1.2, alpha=0.5,
+               label=r"$O(1/N)$")
+    ax1.loglog(N_arr, G_acc_final[0] / ref**2, "--", color=RED,  lw=1.2, alpha=0.5,
+               label=r"$O(1/N^2)$")
+    ax1.set_xlabel("Number of blocks $N$", fontsize=11)
+    ax1.set_ylabel(r"$\mathrm{KL}(\rho_N \| q)$", fontsize=11)
+    ax1.set_title(r"(a) $\lambda = 0.04$, varying $N$", fontsize=11)
+    ax1.legend(fontsize=8, loc="upper right")
+    ax1.grid(True, which="both", ls=":", alpha=0.35)
 
-# Panel A: depth sweep
-ax1.loglog(N_arr, G_std_final, "o-", color=BLUE, lw=2, label="Standard JKO")
-ax1.loglog(N_arr, G_acc_final, "s-", color=RED,  lw=2, label="Accelerated JKO")
-ref = N_arr / N_arr[0]
-ax1.loglog(N_arr, G_std_final[0] / ref,    "--", color=BLUE, lw=1.2, alpha=0.5,
-           label=r"$O(1/N)$")
-ax1.loglog(N_arr, G_acc_final[0] / ref**2, "--", color=RED,  lw=1.2, alpha=0.5,
-           label=r"$O(1/N^2)$")
-ax1.set_xlabel("Number of blocks $N$", fontsize=11)
-ax1.set_ylabel(r"$\mathrm{KL}(\rho_N \| q)$", fontsize=11)
-ax1.set_title(r"(a) $\lambda = 0.04$, varying $N$", fontsize=11)
-ax1.legend(fontsize=8, loc="upper right")
-ax1.grid(True, which="both", ls=":", alpha=0.35)
+    # Panel B: error-floor scaling with lambda
+    ax2.loglog(lam_vals, G_std_floors, "o-", color=BLUE, lw=2, label="Standard JKO")
+    ax2.loglog(lam_vals, G_acc_floors, "s-", color=RED,  lw=2, label="Accelerated JKO")
+    c_ref = G_std_floors[0] * lam_vals[0]**2
+    # ax2.loglog(lam_vals, c_ref / lam_vals**2, "--", color=BLUE, lw=1.2, alpha=0.5,
+    #            label=r"$O(\lambda^{-2})$")
+    ax2.set_xlabel(r"$\lambda$", fontsize=12)
+    ax2.set_ylabel(r"$\mathrm{KL}(\rho_N \| q)$", fontsize=11)
+    ax2.set_title(r"(b) $N = 200$, varying $\lambda$", fontsize=11)
+    ax2.legend(fontsize=9)
+    ax2.grid(True, which="both", ls=":", alpha=0.35)
+    ax2.invert_xaxis()
 
-# Panel B: error-floor scaling with lambda
-ax2.loglog(lam_vals, G_std_floors, "o-", color=BLUE, lw=2, label="Standard JKO")
-ax2.loglog(lam_vals, G_acc_floors, "s-", color=RED,  lw=2, label="Accelerated JKO")
-c_ref = G_std_floors[0] * lam_vals[0]**2
-# ax2.loglog(lam_vals, c_ref / lam_vals**2, "--", color=BLUE, lw=1.2, alpha=0.5,
-#            label=r"$O(\lambda^{-2})$")
-ax2.set_xlabel(r"$\lambda$", fontsize=12)
-ax2.set_ylabel(r"$\mathrm{KL}(\rho_N \| q)$", fontsize=11)
-ax2.set_title(r"(b) $N = 200$, varying $\lambda$", fontsize=11)
-ax2.legend(fontsize=9)
-ax2.grid(True, which="both", ls=":", alpha=0.35)
-ax2.invert_xaxis()
-
-plt.tight_layout()
-fig2.savefig("images/figure_2.png", dpi=160, bbox_inches="tight")
-print("Saved: images/figure_2.png")
-
-# ------------------------------------------------------------------
-#  Console summary
-# ------------------------------------------------------------------
-print("\n" + "=" * 60)
-print("FIGURE 1 -- Slope comparison (weakly convex, lam=0.04)")
-print("=" * 60)
-print(f"  {'t':>6}  {'G_std':>12}  {'G_acc':>12}  {'ratio':>10}")
-for t in [10, 30, 50, 100, 200, 300]:
-    ratio = G_std_w[t] / G_acc_w[t]
-    print(f"  {t:6d}  {G_std_w[t]:12.6f}  {G_acc_w[t]:12.6f}  {ratio:10.3f}")
-
-print("\n" + "=" * 60)
-print("FIGURE 2a -- Depth sweep (lam=0.04, gamma=0.5)")
-print("=" * 60)
-print(f"  {'N':>6}  {'G_std(N)':>12}  {'G_acc(N)':>12}  {'ratio':>10}")
-for i, N in enumerate(N_list):
-    print(f"  {N:6d}  {G_std_final[i]:12.6f}  {G_acc_final[i]:12.6f}  {depth_ratio[i]:10.3f}")
-
-print("\n" + "=" * 60)
-print("FIGURE 2b -- Error floor scaling (N=200, gamma=0.5)")
-print("=" * 60)
-print(f"  {'lam':>8}  {'G_std':>12}  {'G_acc':>12}  {'ratio':>10}")
-for i, lv in enumerate(lam_vals):
-    print(f"  {lv:8.3f}  {G_std_floors[i]:12.6f}  {G_acc_floors[i]:12.6f}  {floor_ratio[i]:10.3f}")
-
-plt.show()
-print("\nDone.")
+    plt.tight_layout()
+    fig2.savefig("images/figure_2.png", dpi=160, bbox_inches="tight")
