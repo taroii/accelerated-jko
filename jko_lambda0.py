@@ -3,10 +3,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import integrate, optimize, stats
 
-os.makedirs("images", exist_ok=True)
+from plot_style import apply_paper_style, color_for
 
-BLUE = "#1f77b4"
-RED  = "#d62728"
+apply_paper_style()
+BLUE = color_for("Standard JKO")
+RED  = color_for("Accelerated JKO")
+
+os.makedirs("images", exist_ok=True)
 
 #  Target: symmetric Gaussian mixture
 MU_Q  = 2.0
@@ -131,16 +134,16 @@ if __name__ == "__main__":
 
     fig, ax = plt.subplots(figsize=(5.5, 4.5))
 
-    ax.semilogy(iters, G_std, color=BLUE, lw=2, label="Standard JKO")
-    ax.semilogy(iters, G_acc, color=RED,  lw=2, label="Accelerated JKO")
+    ax.semilogy(iters, G_std, color=BLUE, label="Standard JKO")
+    ax.semilogy(iters, G_acc, color=RED,  label="Accelerated JKO")
     ax.semilogy(iters[1:], b_acc[1:], "--", color=RED, lw=1.2, alpha=0.5,
                 label=r"Acc bound $\propto t^{-2}$")
-    ax.set_xlabel("Block $t$", fontsize=11)
-    ax.set_ylabel(r"$\mathrm{KL}(\rho_t \| q)$", fontsize=11)
-    ax.legend(fontsize=8, loc="upper right")
-    ax.grid(True, which="both", ls=":", alpha=0.35)
+    ax.set_xlabel("Block $t$")
+    ax.set_ylabel(r"$\mathrm{KL}(\rho_t \| q)$")
+    ax.legend(loc="upper right")
+    ax.grid(True, which="both")
 
     plt.tight_layout()
-    fig.savefig("images/figure_3.png", dpi=160, bbox_inches="tight")
+    fig.savefig("images/figure_3.pdf", bbox_inches="tight")
 
     plt.show()

@@ -4,10 +4,13 @@ import matplotlib.pyplot as plt
 from scipy.special import logsumexp
 from scipy.linalg import solve_banded
 
-os.makedirs("images", exist_ok=True)
+from plot_style import apply_paper_style, color_for
 
-BLUE = "#1f77b4"
-RED  = "#d62728"
+apply_paper_style()
+BLUE = color_for("SGA")
+RED  = color_for("ASGA")
+
+os.makedirs("images", exist_ok=True)
 
 #  Problem setup
 np.random.seed(0)
@@ -122,8 +125,8 @@ if __name__ == "__main__":
 
     fig, ax = plt.subplots(figsize=(5.5, 4.5))
 
-    ax.loglog(iters, g_sga,  color=BLUE, lw=2, label="SGA")
-    ax.loglog(iters, g_asga, color=RED,  lw=2, label="ASGA")
+    ax.loglog(iters, g_sga,  color=BLUE, label="SGA")
+    ax.loglog(iters, g_asga, color=RED,  label="ASGA")
 
     # Reference slopes anchored at t=20
     c1 = g_sga[19]  * 20
@@ -133,12 +136,12 @@ if __name__ == "__main__":
     ax.loglog(iters, c2 / iters**2,    "--", color=RED,  lw=1.2, alpha=0.5,
               label=r"$O(t^{-2})$")
 
-    ax.set_xlabel("Iteration $t$", fontsize=11)
-    ax.set_ylabel(r"$\mathcal{I}(\tilde{f}) - \mathcal{I}(f^{(t)})$", fontsize=11)
-    ax.legend(fontsize=9, loc="lower left")
-    ax.grid(True, which="both", ls=":", alpha=0.35)
+    ax.set_xlabel("Iteration $t$")
+    ax.set_ylabel(r"$\mathcal{I}(\tilde{f}) - \mathcal{I}(f^{(t)})$")
+    ax.legend(loc="lower left")
+    ax.grid(True, which="both")
 
     plt.tight_layout()
-    fig.savefig("images/figure_4.png", dpi=160, bbox_inches="tight")
+    fig.savefig("images/figure_4.pdf", bbox_inches="tight")
 
     plt.show()

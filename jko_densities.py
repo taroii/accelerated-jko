@@ -4,7 +4,6 @@ import time
 import warnings
 
 import numpy as np
-import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import torch
@@ -13,15 +12,17 @@ import torch.optim as optim
 from torch.func import jacrev, vmap
 from geomloss import SamplesLoss
 
+from plot_style import apply_paper_style, color_for
+
 warnings.filterwarnings("ignore")
-matplotlib.rcParams.update({"font.size": 10})
+apply_paper_style()
+BLUE = color_for("Standard JKO")
+RED  = color_for("Accelerated JKO")
+
 os.makedirs("images", exist_ok=True)
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Device: {DEVICE}")
-
-BLUE = "#1f77b4"
-RED  = "#d62728"
 
 #  Built-in target densities
 def _grid(res=256):
@@ -237,32 +238,33 @@ def plot_particles(snaps_std, snaps_acc, w2_std, w2_acc, target, n_blocks, savep
                       interpolation="bilinear")
             pts = snaps[si].cpu().numpy()
             ax.scatter(pts[:, 0], pts[:, 1],
-                       s=4, alpha=0.25, color=color, linewidths=0)
+                       s=4, alpha=0.25, color=color, linewidths=0,
+                       rasterized=True)
             ax.text(0.97, 0.97, f"$W_2$ = {w2s[si]:.3f}",
                     transform=ax.transAxes, ha="right", va="top", fontsize=9,
                     bbox=dict(facecolor="white", alpha=0.8,
                               edgecolor="none", pad=1.8))
             if row == 0:
-                ax.set_title(f"Block {si}", fontsize=9, pad=3)
+                ax.set_title(f"Block {si}", pad=3)
             if ci == 0:
-                ax.set_ylabel(label, fontsize=9)
+                ax.set_ylabel(label)
             ax.set_xlim(-1.1, 1.1); ax.set_ylim(-1.1, 1.1)
             ax.set_xticks([]); ax.set_yticks([])
 
     ax_c = fig.add_subplot(gs[2, :])
     t = np.arange(n_blocks + 1)
-    ax_c.semilogy(t, w2_std, color=BLUE, lw=1.8, label="Standard JKO")
-    ax_c.semilogy(t, w2_acc, color=RED,  lw=1.8, label="Accelerated JKO")
+    ax_c.semilogy(t, w2_std, color=BLUE, label="Standard JKO")
+    ax_c.semilogy(t, w2_acc, color=RED,  label="Accelerated JKO")
     for si in snap_idx:
         ax_c.axvline(si, color="gray", ls=":", alpha=0.35, lw=0.8)
-    ax_c.set_xlabel("Block $t$", fontsize=10)
-    ax_c.set_ylabel(r"$W_2(\rho_t,\, q)$", fontsize=10)
-    ax_c.legend(fontsize=9, loc="upper right")
-    ax_c.grid(True, which="both", ls=":", alpha=0.35)
+    ax_c.set_xlabel("Block $t$")
+    ax_c.set_ylabel(r"$W_2(\rho_t,\, q)$")
+    ax_c.legend(loc="upper right")
+    ax_c.grid(True, which="both")
     ax_c.set_xlim(0, n_blocks)
 
     plt.tight_layout()
-    fig.savefig(savepath, dpi=160, bbox_inches="tight")
+    fig.savefig(savepath, dpi=300, bbox_inches="tight")
     print(f"Saved: {savepath}")
 
 #  Main
@@ -284,7 +286,7 @@ def run(target_name, gamma=0.08, n_blocks=25, n_particles=12000,
         target, gamma, n_blocks, n_particles, n_epochs, seed, y_ref=y_ref)
 
     plot_particles(snaps_std, snaps_acc, w2_std, w2_acc, target, n_blocks,
-                   savepath=f"images/particles_{target_name}.png")
+                   savepath=f"images/particles_{target_name}.pdf")
 
 
 if __name__ == "__main__":

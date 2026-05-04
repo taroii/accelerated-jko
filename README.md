@@ -64,10 +64,10 @@ Running the four scripts above regenerates every figure in the paper:
 
 | Script              | Output                                                      | What it shows                                                                                                                     |
 | ------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `jko_comparison.py` | `images/figure_1.png`, `images/figure_2.png`                | Closed-form 1-D Gaussians. Fig 1: $O(t^{-1})$ vs. $O(t^{-2})$ rates (weakly convex, $\lambda = 0.04$) and exponential vs. $O(t^{-2})$ rates (strongly convex, $\lambda = 1$). Fig 2: final KL vs. block count $N$ and vs. $\lambda$. |
-| `jko_lambda0.py`    | `images/figure_3.png`                                       | Symmetric Gaussian-mixture target with $\lambda = 0$ exactly. Accelerated JKO matches the $O(t^{-2})$ bound; standard JKO stalls at an error floor. |
-| `jko_asga.py`       | `images/figure_4.png`                                       | Wasserstein barycenter of four 1-D Gaussians. ASGA duality gap empirically tracks $O(t^{-2})$; SGA tracks $O(t^{-1})$.             |
-| `jko_densities.py`  | `images/particles_{bunny,rings,rectangle,disk,outer_ring}.png` | Neural JKO on five 2-D targets. Each figure shows particle snapshots for standard vs. accelerated JKO plus a Sinkhorn $W_2$-vs-block convergence strip. |
+| `jko_comparison.py` | `images/figure_1.pdf`, `images/figure_2.pdf`                | Closed-form 1-D Gaussians. Fig 1: $O(t^{-1})$ vs. $O(t^{-2})$ rates (weakly convex, $\lambda = 0.04$) and exponential vs. $O(t^{-2})$ rates (strongly convex, $\lambda = 1$). Fig 2: final KL vs. block count $N$ and vs. $\lambda$. |
+| `jko_lambda0.py`    | `images/figure_3.pdf`                                       | Symmetric Gaussian-mixture target with $\lambda = 0$ exactly. Accelerated JKO matches the $O(t^{-2})$ bound; standard JKO stalls at an error floor. |
+| `jko_asga.py`       | `images/figure_4.pdf`                                       | Wasserstein barycenter of four 1-D Gaussians. ASGA duality gap empirically tracks $O(t^{-2})$; SGA tracks $O(t^{-1})$.             |
+| `jko_densities.py`  | `images/particles_{bunny,rings,rectangle,disk,outer_ring}.pdf` | Neural JKO on five 2-D targets. Each figure shows particle snapshots for standard vs. accelerated JKO plus a Sinkhorn $W_2$-vs-block convergence strip. |
 
 All figures land in `images/`.
 
