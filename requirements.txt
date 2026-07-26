@@ -1,9 +1,7 @@
 numpy
-matplotlib
-geomloss
-pillow
 scipy
-tqdm
-argparse
-torchmetrics
-torch-fidelity
+matplotlib
+pyyaml
+torch
+geomloss
+pot

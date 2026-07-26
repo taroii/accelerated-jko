@@ -5,9 +5,15 @@ data/
 .claude/
 .DS_Store
 temp/
+scratchpad/
 
 *.pt
 MNISTDiffusion/
 mnist_data/
 
 old/
+paper/
+
+# generated experiment output (regenerate with the scripts + collate.py)
+results/
+images/e*.pdf

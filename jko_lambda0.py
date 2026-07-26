@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import integrate, optimize, stats
 
+import experiment_io as eio
 from plot_style import apply_paper_style, color_for
 
 apply_paper_style()
@@ -108,13 +109,6 @@ def run_accelerated_jko(m0, s0, gamma, n_steps):
     return np.array(G_vals)
 
 
-#  Theoretical bound  O(t^-2)
-def bound_acc(G0, W2sq_0, gamma, n_steps):
-    t      = np.arange(n_steps + 1)
-    Delta0 = W2sq_0 / (2.0 * gamma) + G0
-    return np.where(t == 0, G0, 9.0 * Delta0 / (t + 2)**2)
-
-
 if __name__ == "__main__":
     #  Run
     m0, s0  = 0.5, 2.0
@@ -123,27 +117,32 @@ if __name__ == "__main__":
 
     G_std = run_standard_jko(m0, s0, GAMMA, N_STEPS)
     G_acc = run_accelerated_jko(m0, s0, GAMMA, N_STEPS)
+    acc_runmin = np.minimum.accumulate(G_acc)
 
-    G0     = kl_rho_q(m0, s0)
-    W2sq_0 = w2_sq(m0, s0, MU_Q, SIG_Q)
-    b_acc  = bound_acc(G0, W2sq_0, GAMMA, N_STEPS)
-
-    #  Plot
+    #  Plot  (no O(t^-2) reference: this target is not geodesically convex, lambda < 0)
     iters = np.arange(N_STEPS + 1)
-    pos   = iters[iters > 0]
 
     fig, ax = plt.subplots(figsize=(5.5, 4.5))
 
     ax.semilogy(iters, G_std, color=BLUE, label="Standard JKO")
     ax.semilogy(iters, G_acc, color=RED,  label="Accelerated JKO")
-    ax.semilogy(iters[1:], b_acc[1:], "--", color=RED, lw=1.2, alpha=0.5,
-                label=r"Acc bound $\propto t^{-2}$")
+    ax.semilogy(iters, acc_runmin, ":", color=RED, lw=1.2, label="Accelerated running min")
     ax.set_xlabel("Block $t$")
     ax.set_ylabel(r"$\mathrm{KL}(\rho_t \| q)$")
+    ax.set_title(r"double-well ($\lambda < 0$),  init $\mathcal{N}(%.1f, %.1f^2)$" % (m0, s0))
     ax.legend(loc="upper right")
     ax.grid(True, which="both")
 
     plt.tight_layout()
     fig.savefig("images/figure_3.pdf", bbox_inches="tight")
 
-    plt.show()
+    eio.save_config("e2_fig4_doublewell",
+                    {"init_mean": m0, "init_std": s0, "gamma": GAMMA, "n_steps": N_STEPS,
+                     "target": "0.5 N(2,0.7^2)+0.5 N(-2,0.7^2)", "lam_class": "negative"})
+    eio.save_metrics("e2_fig4_doublewell",
+                     [{"block": t, "kl_std": G_std[t], "kl_acc": G_acc[t],
+                       "acc_runmin": acc_runmin[t]} for t in range(N_STEPS + 1)])
+    eio.save_summary("e2_fig4_doublewell",
+                     {"final_kl_std": float(G_std[-1]), "final_kl_acc": float(G_acc[-1]),
+                      "min_kl_acc": float(acc_runmin[-1]), "init": f"N({m0},{s0}^2)"})
+    print(f"[e2 fig4] final KL std={G_std[-1]:.3e} acc={G_acc[-1]:.3e} min_acc={acc_runmin[-1]:.3e}")

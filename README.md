@@ -71,6 +71,25 @@ Running the four scripts above regenerates every figure in the paper:
 
 All figures land in `images/`.
 
+## Rebuttal experiments
+
+Additional experiments probing the theory–experiment boundary. Each writes
+machine-readable results to `results/<exp_id>/{config.json,metrics.csv,summary.json}`;
+`python collate.py` builds the E4 wall-clock table and collates every marked quantity
+into `results/rebuttal_numbers.md`. Config-driven runs read `configs/*.yaml`.
+
+| Script               | Covers | What it does |
+| -------------------- | ------ | ------------ |
+| `jko_quantile.py`    | E1, E5/E6 | Nonparametric 1-D JKO in quantile coordinates (exact $W_2$, no OT solver). `--exp e1a`: hold $\lambda=0$, drive the spectral gap to zero via $V_R$; `e1b`: $\lambda=0$ KL targets (exponential decay + blocks-to-threshold + monotonicity / map-defect checks); `e1c`: non-diffusive potential/interaction functionals where the $t^{-1}$/$t^{-2}$ power laws actually appear; `e56`: adaptive restart and monotone-fallback safeguard. |
+| `jko_mixture.py`     | E3 | f2TU's asymmetric 10:1 Gaussian-mixture stress test (standard / accelerated / GD, three inits); MC-validated KL. |
+| `jko_asga_exp.py`    | E8 | Exact-prox ASGA variant, empirical-vs-certified Lipschitz constant, and $\varepsilon\times n\times m$ robustness sweep. |
+| `jko_defect2d.py`    | E7 | 2-D outer-ring map defect $\delta_t$ via `ot.emd` (POT). |
+| `jko_neural.py`      | E9 | Dimension scaling on $\lambda=0$ radial targets, $d\in\{2,5,10,20,50\}$. |
+| `jko_sweep.py`       | E10 | $\gamma\times$width$\times$depth sensitivity grid on the 2-D ring. |
+
+The GPU/particle jobs (E7, E9, E10, and the full Figure 1 run) are listed in
+`SERVER_RUNS.md`.
+
 ## Contributing
 
 This code is released under the MIT License (see `LICENSE`). Issues and pull requests are welcome.

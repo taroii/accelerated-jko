@@ -1,0 +1,29 @@
+gamma: 0.5
+n_blocks: 300
+M: 4000
+seed: 0
+slope_window_frac: 0.1          # last-decade least-squares window for log-log fits
+
+e1b:
+  init: {mean: 5.0, std: 2.5}
+  thresholds: [1.0e-3, 1.0e-6, 1.0e-9]
+  targets:
+    - {id: quartic,       kind: quartic,    lam_class: 0}
+    - {id: cubic,         kind: cubic,      lam_class: 0}
+    - {id: uniform,       kind: uniform,    lam_class: 0}
+    - {id: gauss_lam1e-3, kind: gauss,      lam_class: positive, var: 1000.0}
+    - {id: doublewell_np, kind: doublewell, lam_class: negative, mu: 2.0, sigma: 0.7}
+
+e1a:
+  R_values: [2, 4, 8, 16, 32]
+  M: 1000
+  n_blocks: 2000
+  early_stop: 1.0e-6
+  thresholds: [1.0e-2, 1.0e-3]
+  init_mean: 0.0
+  init_std_base: 1.5            # init N(init_mean, (init_std_base + 0.5 R)^2)
+  init_std_slope: 0.5
+
+e1c:
+  M: 500
+  init: {mean: 5.0, std: 2.5}

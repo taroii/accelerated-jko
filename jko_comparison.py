@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 
+import experiment_io as eio
 from plot_style import apply_paper_style, color_for
 
 apply_paper_style()
@@ -80,7 +81,7 @@ if __name__ == "__main__":
     GAMMA   = 0.5
 
     #  FIGURE 1
-    N_WEAK   = 300   # enough iterations to show clear slope difference
+    N_WEAK   = 2000  # long horizon to expose the late std/acc crossover
     N_STRONG = 49    # exponential needs fewer steps to converge
 
     lam_weak   = 0.04
@@ -116,41 +117,73 @@ if __name__ == "__main__":
     G_acc_final = np.array(G_acc_final)
     depth_ratio = G_std_final / G_acc_final
 
+    # running minimum of the accelerated gap (what the Lyapunov functional controls)
+    acc_runmin_w = np.minimum.accumulate(G_acc_w)
+    # crossover: standard's exponential phase eventually overtakes accelerated
+    post = np.arange(len(G_std_w))
+    cross = np.where((post > 20) & (G_std_w < G_acc_w))[0]
+    crossover_iter = int(cross[0]) if len(cross) else -1
+
     # plot
     fig, axes = plt.subplots(1, 2, figsize=(10, 4.5))
 
     # Panel A: weakly convex, log-log
     ax = axes[0]
     iters_w = np.arange(1, N_WEAK + 1)   # skip t=0 for log-log
-    ax.loglog(iters_w, G_std_w[1:], color=BLUE, label="Standard JKO")
-    ax.loglog(iters_w, G_acc_w[1:], color=RED,  label="Accelerated JKO")
+    clip = lambda a: np.maximum(a, 1e-16)
+    ax.loglog(iters_w, clip(G_std_w[1:]), color=BLUE, label="Standard JKO")
+    ax.loglog(iters_w, clip(G_acc_w[1:]), color=RED,  label="Accelerated JKO")
+    ax.loglog(iters_w, clip(acc_runmin_w[1:]), ":", color=RED, lw=1.2,
+              label="Accelerated running min")
     ax.loglog(iters_w, b_std_w[1:], "--", color=BLUE, lw=1.2, alpha=0.5,
-              label=r"Std bound $\propto t^{-1}$")
-    ax.loglog(iters_w, b_acc_w[1:], "--", color=RED,  lw=1.2, alpha=0.5,
-              label=r"Acc bound $\propto t^{-2}$")
+              label="finite-horizon reference (pre-asymptotic)")
+    if crossover_iter > 0:
+        ax.axvline(crossover_iter, color="gray", ls=":", lw=1.0)
+        ax.annotate(f"crossover $t={crossover_iter}$", (crossover_iter, ax.get_ylim()[0]),
+                    xytext=(3, 3), textcoords="offset points", fontsize=7, rotation=90,
+                    va="bottom")
     ax.set_xlabel("Block $t$")
     ax.set_ylabel(r"$\mathrm{KL}(\rho_t \| q)$")
-    ax.set_title(r"(a) $\lambda = 0.04$")
+    ax.set_title(r"(a) $\lambda = 0.04$,  init $\mathcal{N}(5, 2.5^2)$")
     ax.legend(loc="lower left")
     ax.grid(True, which="both")
 
     # Panel B: strongly convex, log-linear
     ax = axes[1]
     iters_s = np.arange(N_STRONG + 1)
-    ax.semilogy(iters_s, G_std_s, color=BLUE, label="Standard JKO")
-    ax.semilogy(iters_s, G_acc_s, color=RED,  label="Accelerated JKO")
+    clip = lambda a: np.maximum(a, 1e-16)
+    cross_s = np.where((np.arange(len(G_std_s)) > 5) & (G_std_s < G_acc_s))[0]
+    crossover_iter_strong = int(cross_s[0]) if len(cross_s) else -1
+    ax.semilogy(iters_s, clip(G_std_s), color=BLUE, label="Standard JKO")
+    ax.semilogy(iters_s, clip(G_acc_s), color=RED,  label="Accelerated JKO")
+    ax.semilogy(iters_s, clip(np.minimum.accumulate(G_acc_s)), ":", color=RED, lw=1.2,
+                label="Accelerated running min")
     ax.semilogy(iters_s[1:], b_std_s[1:], "--", color=BLUE, lw=1.2, alpha=0.5,
                 label=r"Std bound $\propto e^{-\gamma\lambda n/2}$")
-    ax.semilogy(iters_s[1:], b_acc_s[1:], "--", color=RED,  lw=1.2, alpha=0.5,
-                label=r"Acc bound $\propto t^{-2}$")
     ax.set_xlabel("Block $t$")
     ax.set_ylabel(r"$\mathrm{KL}(\rho_t \| q)$")
-    ax.set_title(r"(b) $\lambda = 1$")
+    ax.set_title(r"(b) $\lambda = 1$,  init $\mathcal{N}(5, 2.5^2)$")
     ax.legend(loc="upper right")
     ax.grid(True, which="both")
 
     plt.tight_layout()
     fig.savefig("images/figure_1.pdf", bbox_inches="tight")
+
+    eio.save_config("e2_fig2_gaussian",
+                    {"init_mean": m0, "init_std": s0, "gamma": GAMMA,
+                     "lam_weak": lam_weak, "lam_strong": lam_strong,
+                     "N_weak": N_WEAK, "N_strong": N_STRONG})
+    eio.save_metrics("e2_fig2_gaussian",
+                     [{"block": t, "kl_std_lam0.04": G_std_w[t], "kl_acc_lam0.04": G_acc_w[t],
+                       "acc_runmin_lam0.04": acc_runmin_w[t]} for t in range(N_WEAK + 1)])
+    eio.save_summary("e2_fig2_gaussian",
+                     {"crossover_iter_lambda0.04": crossover_iter,
+                      "crossover_iter_lambda1": crossover_iter_strong,
+                      "final_kl_std_lam0.04": float(G_std_w[-1]),
+                      "final_kl_acc_lam0.04": float(G_acc_w[-1]),
+                      "init": f"N({m0},{s0}^2)"})
+    print(f"[e2 fig2] crossover_iter lambda=0.04 -> {crossover_iter}, "
+          f"lambda=1 -> {crossover_iter_strong}")
 
 
     #  FIGURE 2
@@ -167,7 +200,7 @@ if __name__ == "__main__":
 
     G_std_floors = np.array(G_std_floors)
     G_acc_floors = np.array(G_acc_floors)
-    floor_ratio  = G_std_floors / G_acc_floors
+    floor_ratio  = G_std_floors / np.maximum(G_acc_floors, 1e-300)
 
     fig2, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.5))
 

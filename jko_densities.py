@@ -12,6 +12,7 @@ import torch.optim as optim
 from torch.func import jacrev, vmap
 from geomloss import SamplesLoss
 
+import experiment_io as eio
 from plot_style import apply_paper_style, color_for
 
 warnings.filterwarnings("ignore")
@@ -287,6 +288,28 @@ def run(target_name, gamma=0.08, n_blocks=25, n_particles=12000,
 
     plot_particles(snaps_std, snaps_acc, w2_std, w2_acc, target, n_blocks,
                    savepath=f"images/particles_{target_name}.pdf")
+
+    # E11: dump full numerical setup + results so Figure 1 is reproducible from config
+    exp_id = f"e11_{target_name}"
+    eio.save_config(exp_id, {
+        "target": target_name, "grid_res": target.res, "gamma": gamma,
+        "n_blocks": n_blocks, "n_particles": n_particles, "n_epochs": n_epochs,
+        "seed": seed, "init": "x0 ~ N(0, 1.5^2 I)", "optimizer": "Adam lr=2e-3",
+        "lr_schedule": "cosine to 1e-4", "batch": 1024, "grad_clip": 5.0,
+        "transport_map": "residual MLP 2->256->256->256->2, SiLU, zero-init last layer",
+        "prox_scheme": "min over T of -E[log q(T y)+logdet DT] + ||y-Ty||^2/(2 gamma)",
+        "logdet": "exact via torch.func jacrev/vmap slogdet",
+        "extrapolation": "y_t = (1-alpha) x_t + alpha z_t, alpha=3/(t+3), index-aligned",
+        "momentum": "z_{t+1} = z_t + (x_{t+1}-y_t)/alpha",
+        "clamp_x": [-2.5, 2.5], "clamp_z": [-3.5, 3.5],
+        "w2_metric": "geomloss Sinkhorn divergence p=2 blur=0.01 scaling=0.95 (approx W2)",
+        "w2_ref_samples": 4096})
+    eio.save_metrics(exp_id, [{"block": t, "w2_std": w2_std[t], "w2_acc": w2_acc[t]}
+                              for t in range(n_blocks + 1)])
+    eio.save_summary(exp_id, {"final_w2_std": float(w2_std[-1]),
+                              "final_w2_acc": float(w2_acc[-1]),
+                              "reduction_pct": float(100 * (1 - w2_acc[-1] / w2_std[-1]))})
+    print(f"[e11 {target_name}] final W2 std={w2_std[-1]:.4f} acc={w2_acc[-1]:.4f}")
 
 
 if __name__ == "__main__":
