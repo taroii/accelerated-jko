@@ -1,0 +1,17 @@
+{
+  "blocks": 25,
+  "particles": 8000,
+  "epochs": 600,
+  "gamma": 0.05,
+  "seed": 0,
+  "target": "flatvalley",
+  "R": 2.0,
+  "thresh": 0.1,
+  "dims": [
+    2,
+    5,
+    10,
+    20,
+    50
+  ]
+}
