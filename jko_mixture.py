@@ -169,6 +169,9 @@ def run_variance(sig2, cfg, tag):
             numbers[f"final_KL_{name}_init{i}"] = fk[name]
             numbers[f"iters_to_mode_separation_{name}_init{i}"] = iters_to_separation(tr)
         numbers[f"gd_best_eta_init{i}"] = float(eta_best)
+        # bug check: momentum must produce a distinct accelerated trajectory
+        numbers[f"max_traj_divergence_init{i}"] = float(
+            np.linalg.norm(tr_std - tr_acc, axis=1).max())
         print(f"[{tag} init{i}] final KL(MC) std={fk['std']:.3e} acc={fk['acc']:.3e} "
               f"gd={fk['gd']:.3e}(η={eta_best}) sep std/acc/gd="
               f"{iters_to_separation(tr_std)}/{iters_to_separation(tr_acc)}/{iters_to_separation(tr_gd)}")
@@ -224,10 +227,9 @@ def main():
     args = ap.parse_args()
     cfg = yaml.safe_load(open(args.config))
     np.random.seed(cfg["seed"])
-    allnum = {}
-    allnum["primary_sig2_0.012"] = run_variance(0.012, cfg, "sig2_0p012")
-    allnum["appendix_sig2_1e-4"] = run_variance(1e-4, cfg, "sig2_1e-4")
-    eio.save_summary("e3_mixture", allnum)
+    # sigma^2 = 1e-4 dropped: parameters hit the bound constraints and grid-KL vs
+    # MC-KL disagreed by ~10x (not numerically meaningful). Primary run only.
+    eio.save_summary("e3_mixture", {"primary_sig2_0.012": run_variance(0.012, cfg, "sig2_0p012")})
 
 
 if __name__ == "__main__":
