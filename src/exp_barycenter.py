@@ -100,7 +100,7 @@ def asga(prob, N, eta, Istar):
     fs = [np.zeros(prob.n) for _ in range(prob.m)]
     zs = [f.copy() for f in fs]
     gaps = []
-    for t in range(1, N + 1):
+    for t in range(N):
         a = 3.0 / (t + 3.0)
         ys = [(1 - a) * fs[i] + a * zs[i] for i in range(prob.m)]
         gs = prob.I_grad(ys)
@@ -121,7 +121,7 @@ def _exact_prox(prob, ys, eta):
         for i in range(m):
             diff = fs[i] - ys[i]
             val += prob.w[i] * prob.h1_ip(diff, diff) / (2 * eta)
-            grad[i * n:(i + 1) * n] = -res[i] + prob.w[i] * prob.A(diff) / eta
+            grad[i * n:(i + 1) * n] = prob.w[i] * (-res[i] + prob.A(diff) / eta)
         return val, grad
 
     x0 = np.concatenate(ys)
@@ -134,7 +134,7 @@ def asga_exact_prox(prob, N, eta, Istar):
     fs = [np.zeros(prob.n) for _ in range(prob.m)]
     zs = [f.copy() for f in fs]
     gaps, inner = [], []
-    for t in range(1, N + 1):
+    for t in range(N):
         a = 3.0 / (t + 3.0)
         ys = [(1 - a) * fs[i] + a * zs[i] for i in range(prob.m)]
         fs, nit = _exact_prox(prob, ys, eta)
@@ -178,7 +178,7 @@ def _long_ref(prob, N=3000):
     eta = 1.0 / L
     fs = [np.zeros(prob.n) for _ in range(prob.m)]
     zs = [f.copy() for f in fs]
-    for t in range(1, N + 1):
+    for t in range(N):
         a = 3.0 / (t + 3.0)
         ys = [(1 - a) * fs[i] + a * zs[i] for i in range(prob.m)]
         gs = prob.I_grad(ys)
@@ -236,7 +236,7 @@ def _istar_exactprox(prob, Nref, eta):
     best = prob.I_val(_long_ref(prob, Nref))
     fs = [np.zeros(prob.n) for _ in range(prob.m)]
     zs = [f.copy() for f in fs]
-    for t in range(1, Nref + 1):
+    for t in range(Nref):
         a = 3.0 / (t + 3.0)
         ys = [(1 - a) * fs[i] + a * zs[i] for i in range(prob.m)]
         fs, _ = _exact_prox(prob, ys, eta)
@@ -270,7 +270,7 @@ def make_cfg(args):
         return {"eps": [0.008], "ns": [60], "ms": [4], "seeds": 2, "N": 120, "Nref": 800,
                 "ep_eps": 0.008, "ep_seeds": 2, "ep_N": 60, "ep_ref": 60, "quick": True}
     return {"eps": [0.002, 0.004, 0.008, 0.016], "ns": [60, 120, 240], "ms": [2, 4, 8],
-            "seeds": args.seeds, "N": 400, "Nref": 3000,
+            "seeds": args.seeds, "N": 400, "Nref": 1200,
             "ep_eps": 0.008, "ep_seeds": min(args.seeds, 3), "ep_N": 300, "ep_ref": 200,
             "quick": False,
             "note": "reported quantity is the fitted-slope distribution over seeds per cell"}
@@ -509,7 +509,7 @@ def run_full(cfg, out):
            "sga_all": np.array(rep_sga).tolist(), "asga_all": np.array(rep_asga).tolist()}
     summary = summarize(rows, rep)
     jko.save_run("barycenter", cfg, rows, summary, outdir=os.path.join(out, "results"))
-    make_figure(summary, os.path.join(out, "figures", "barycenter.pdf"))
+    make_figure(summary, os.path.join(out, "paper", "barycenter.pdf"))
     print(paper_line(summary, cfg))
 
 
@@ -524,7 +524,7 @@ def rebuild_from_csv(path):
     summary = summarize(rows, rep)
     json.dump(summary, open(summ_path, "w"), indent=2)
     out = os.path.dirname(os.path.dirname(d)) or "."
-    make_figure(summary, os.path.join(out, "figures", "barycenter.pdf"))
+    make_figure(summary, os.path.join(out, "paper", "barycenter.pdf"))
     print(paper_line(summary))
 
 

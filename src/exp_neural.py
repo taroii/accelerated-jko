@@ -241,7 +241,7 @@ def from_csv(path, out):
     cs, ca = np.array(curves["std"]), np.array(curves["acc"])
     summary = build_summary(cs[:, -1], ca[:, -1])
     os.makedirs(os.path.join(out, "results", "neural"), exist_ok=True)
-    plot_convergence(cs, ca, n_blocks, os.path.join(out, "figures", "neural.pdf"))
+    plot_convergence(cs, ca, n_blocks, os.path.join(out, "paper", "neural.pdf"))
     import json
     json.dump(summary, open(os.path.join(out, "results", "neural", "summary.json"), "w"), indent=2)
     print(f"[neural | from-csv | QUALITATIVE] median final W2: "
@@ -316,7 +316,7 @@ def main():
     jko.save_run("neural", config, per_seed_rows, summary, outdir=os.path.join(args.out, "results"))
     plot_full(rep_snaps_std, rep_snaps_acc, rep_w2_std, rep_w2_acc,
               curves_std, curves_acc, target, n_blocks,
-              os.path.join(args.out, "figures", "neural.pdf"))
+              os.path.join(args.out, "paper", "neural.pdf"))
 
     print(f"[neural | QUALITATIVE demo, target outside theory] median final W2: "
           f"std={summary['median_final_w2_std']:.4f} "

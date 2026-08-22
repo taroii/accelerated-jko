@@ -18,14 +18,17 @@ pip install -r requirements.txt          # numpy scipy matplotlib
 
 ```
 ./scripts/run_all.sh                 # 50 seeds, CPU, well under an hour
-SEEDS=2 ./scripts/run_all.sh         # smoke test, < 2 minutes
+QUICK=1 ./scripts/run_all.sh         # 2-seed smoke test, < 2 minutes
+SEEDS=20 ./scripts/run_all.sh        # custom seed count
 WITH_NEURAL=1 ./scripts/run_all.sh   # also runs the optional GPU demo
 ```
 
 `run_all.sh` first runs `python src/jko.py`, the correctness suite (Section below); it aborts
 if any check fails. Each experiment writes `results/<exp>/{config.json,per_seed.csv,summary.json}`
-and `figures/<exp>.pdf` at the repo root. Figures and summaries are regenerable from
-`per_seed.csv` alone:
+and its figure into `paper/<exp>.pdf` (so the `paper/` folder can be copied straight to
+Overleaf). Summaries and the scalar/curve figures are regenerable from `per_seed.csv`;
+the barycenter reference curves and the neural particle snapshots additionally need the
+saved `summary.json` / a full run:
 
 ```
 python src/exp_rate.py --from-csv results/rate/per_seed.csv
@@ -37,7 +40,7 @@ python src/exp_rate.py --from-csv results/rate/per_seed.csv
 src/       jko.py + one file per experiment
 scripts/   run_all.sh
 results/   generated per-experiment output (config.json, per_seed.csv, summary.json)
-figures/   generated PDF figures
+paper/     temp.tex + generated PDF figures (copy to Overleaf)
 ```
 
 | file | contents |
@@ -45,7 +48,7 @@ figures/   generated PDF figures
 | `src/jko.py` | exact oracles (`prox_radial`, `prox_interaction`, `prox_gaussian`, `prox_quantile`), Bures/Gaussian geometry (`bw_map`, `bw_distance`, `map_defect`), the standard/accelerated schemes (`run`), paired statistics (`paired_summary`, `bootstrap_exponent`), figure style, and the correctness checks (`python src/jko.py`) |
 | `src/exp_rate.py` | **Experiment 1** — rate under vanishing curvature: blocks-to-threshold vs a degeneracy parameter `R`, exact in 1-D (quantile) and any-`d` (Gaussian); non-diffusive potential/interaction arms for the unconditional `d ≥ 2` corollary; a non-log-concave control |
 | `src/exp_inexact.py` | **Experiment 2** — inexact proximal steps: controlled per-step error `e_t ∝ t^{-p/2}`, the `Θ(Tε)` accumulation / transition at `p = 3`, and the theorem's right-hand-side bound |
-| `src/exp_geometry.py` | **Experiment 3** — where the hypotheses bind: exact Gaussian map defect for `d ≥ 2`, the measured bi-Lipschitz condition `λ_min(sym Z_{t+1})`, and the potential-vs-entropy case split |
+| `src/exp_geometry.py` | **Experiment 3** — where the hypotheses bind: exact Gaussian map defect vs `d`, the measured bi-Lipschitz condition `λ_min(sym Z_{t+1})`. The potential-vs-entropy case split is exhibited by the potential/interaction arms of `exp_rate.py` |
 | `src/exp_barycenter.py` | **Experiment 4** — barycenter dual: ASGA vs SGA slope distributions over random instances, certified vs empirical step size |
 | `src/exp_neural.py` | **Experiment 5** (optional) — a qualitative neural particle-transport demonstration; the only file importing `torch` |
 

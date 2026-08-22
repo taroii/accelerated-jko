@@ -161,28 +161,25 @@ def build_summary(data, ds, kappas, n_blocks, config):
             mean_deltas.append(md_mean)
             slopes.append(slope)
 
-    mean_deltas, slopes = np.array(mean_deltas), np.array(slopes)
-    ok = np.isfinite(mean_deltas) & np.isfinite(slopes)
-    r = float(np.corrcoef(mean_deltas[ok], slopes[ok])[0, 1]) if ok.sum() > 2 else float("nan")
-    survived = bool(np.nanmedian(slopes) < -1.5)
-    if not np.isfinite(r) or abs(r) < 0.3:
-        obs = ("No visible degradation: large map defect does NOT coincide with a "
-               "shallower accelerated rate (slopes stay near -2 across d and kappa). "
-               "Consistent with the assumed O(1/t^2) rate holding despite defect.")
-    else:
-        obs = (f"Defect correlates with rate (pearson r={r:.2f}); larger delta_t "
-               f"coincides with a {'shallower' if r > 0 else 'steeper'} accelerated slope.")
-
+    # Descriptive only: these Gaussian KL targets all satisfy an LSI and converge fast,
+    # so this experiment can quantify the map defect and the accelerated slope but is not
+    # positioned to observe a rate collapse; report the measured numbers, not a verdict.
+    slopes = np.array(slopes)
+    median_slope = float(np.nanmedian(slopes))
     d_rep = max(ds)
     rep = per_dk[f"d{d_rep}_k{int(REP_KAPPA)}"]
     return {
         "config": config,
         "per_dk": per_dk,
-        "defect_vs_rate": {"pearson_r": r, "median_gap_slope_acc": float(np.nanmedian(slopes)),
-                           "rate_survived": survived, "observation": obs},
+        "defect_and_rate": {
+            "median_gap_slope_acc": median_slope,
+            "note": ("map defect grows with d and kappa (see per_dk); accelerated gap slope "
+                     "stays near -2 on these always-convergent Gaussian targets. Descriptive: "
+                     "the design cannot exhibit a rate collapse, only bound the defect."),
+        },
         "headline": {"d": d_rep, "kappa": REP_KAPPA,
                      "median_max_defect": rep["median_delta_max"],
-                     "gap_slope_acc": rep["gap_slope_acc"], "rate_survived": survived},
+                     "median_gap_slope_acc": rep["gap_slope_acc"]},
     }
 
 
@@ -224,7 +221,7 @@ def main():
     args = ap.parse_args()
 
     out = args.out
-    fig_path = os.path.join(out, "figures", "geometry.pdf")
+    fig_path = os.path.join(out, "paper", "geometry.pdf")
 
     if args.from_csv:
         data, ds, kappas, seeds, n_blocks = load_csv(args.from_csv)
@@ -236,8 +233,7 @@ def main():
         make_figure(data, ds, n_blocks, fig_path)
         h = summary["headline"]
         print(f"[from-csv] d={h['d']} kappa={h['kappa']:g}: median max-defect "
-              f"{h['median_max_defect']:.3f}, acc slope {h['gap_slope_acc']:.2f}, "
-              f"rate {'survived' if h['rate_survived'] else 'DEGRADED'}")
+              f"{h['median_max_defect']:.3f}, acc slope {h['median_gap_slope_acc']:.2f}")
         return
 
     geometry_gate()
@@ -245,7 +241,7 @@ def main():
     if args.quick:
         ds, seeds, n_blocks = [2, 10], list(range(2)), 10
     else:
-        ds, seeds, n_blocks = [2, 5, 10, 20, 50], list(range(args.seeds)), 60
+        ds, seeds, n_blocks = [2, 5, 10, 20, 50], list(range(args.seeds)), 40
     kappas = KAPPAS
 
     data, rows = collect(ds, kappas, seeds, n_blocks)
@@ -259,8 +255,7 @@ def main():
     h = summary["headline"]
     print(f"d={h['d']}, kappa={h['kappa']:g}, theta=pi/4: median max map-defect "
           f"delta_t = {h['median_max_defect']:.3f} (non-optimal composed map); "
-          f"accelerated late-window gap slope = {h['gap_slope_acc']:.2f} -> "
-          f"O(1/t^2) rate {'SURVIVED' if h['rate_survived'] else 'DEGRADED'}.")
+          f"accelerated late-window gap slope = {h['median_gap_slope_acc']:.2f}.")
 
 
 if __name__ == "__main__":

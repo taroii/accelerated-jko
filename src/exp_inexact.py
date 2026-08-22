@@ -1,6 +1,5 @@
 import argparse
 import csv
-import json
 import os
 
 import numpy as np
@@ -193,7 +192,7 @@ def main():
     summary = build_summary(rows, config)
     jko.save_run("inexact", config, rows, summary,
                  outdir=os.path.join(args.out, "results"))
-    make_figure(rows, os.path.join(args.out, "figures", "inexact.pdf"))
+    make_figure(rows, os.path.join(args.out, "paper", "inexact.pdf"))
 
     per_p = summary["per_p"]
     ps = sorted(float(k) for k in per_p)
