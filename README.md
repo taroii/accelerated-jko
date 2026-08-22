@@ -1,95 +1,69 @@
 # Accelerated Proximal Optimization in Wasserstein and Sobolev Spaces
 
-This repository is the official implementation of **Accelerated Proximal Optimization in Wasserstein and Sobolev Spaces**.
+Reference implementation and experiments for the accelerated JKO / Sobolev-gradient-ascent
+framework. The suite validates the theory with **exact proximal oracles in arbitrary
+dimension** — no neural network and no sampling-based OT solver on the critical path — so
+every quantitative result is deterministic given its inputs and runs on a CPU.
 
-We propose a unified accelerated proximal framework for optimization in Wasserstein and $\dot{\mathbb{H}}^{-1}$ spaces, and demonstrate its power across two fundamental problems in optimal transport and generative modeling. First, we develop an accelerated proximal scheme for optimization in the space of probability measures. Unlike prior work, which requires *strong* convexity of the objective functional $G$ along generalized geodesics, our analysis requires only (non-strong) geodesic convexity, yet achieves an $O(1/t^2)$ convergence rate in both the objective gap and Wasserstein distance. The key mechanism is Nesterov-style momentum applied directly in Wasserstein space via the Jordan–Kinderlehrer–Otto (JKO) scheme, which realizes proximal gradient descent in the space of probability measures. Second, we introduce an Accelerated Sobolev Gradient Ascent (ASGA) algorithm for computing Wasserstein barycenters in the dual space. Under $L$-smoothness of the Kantorovich dual functional in the $\dot{\mathbb{H}}^1$ geometry, ASGA achieves $O(1/t^2)$ convergence — improving from the $O(1/\sqrt{T})$ rate of the (non-accelerated) Sobolev Gradient Ascent of Kim (2025) — while retaining the constraint-free structure that eliminates expensive $c$-concavity projections.
+## Install
 
-This repository contains the closed-form Gaussian experiments, the non-strongly-convex ($\lambda = 0$) case, the ASGA barycenter experiment, and the neural transport-map experiments that together reproduce every figure in the paper.
-
-## Requirements
-
-Create a fresh environment and install the Python dependencies:
-
-```setup
-conda create -n ajko python=3.11
-conda activate ajko
-pip install -r requirements.txt
+```
+pip install -r requirements.txt          # numpy scipy matplotlib
 ```
 
-Install PyTorch separately to match your hardware. On CPU only:
+`torch` and `geomloss` are needed only for the optional neural demonstration
+(`exp_neural.py`); the four quantitative experiments do not use them.
 
-```setup
-pip install torch torchvision
+## Reproduce
+
+```
+./scripts/run_all.sh                 # 50 seeds, CPU, well under an hour
+SEEDS=2 ./scripts/run_all.sh         # smoke test, < 2 minutes
+WITH_NEURAL=1 ./scripts/run_all.sh   # also runs the optional GPU demo
 ```
 
-On CUDA (example — substitute your CUDA version):
+`run_all.sh` first runs `python src/jko.py`, the correctness suite (Section below); it aborts
+if any check fails. Each experiment writes `results/<exp>/{config.json,per_seed.csv,summary.json}`
+and `figures/<exp>.pdf` at the repo root. Figures and summaries are regenerable from
+`per_seed.csv` alone:
 
-```setup
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130
+```
+python src/exp_rate.py --from-csv results/rate/per_seed.csv
 ```
 
-See https://pytorch.org/get-started/locally/ for the correct command for your system.
+## Layout
 
-## Training
-
-The neural transport experiments train a fresh residual MLP $T_\theta(x) = x + \mathrm{MLP}(x)$ at every JKO block via mini-batch Adam. To reproduce the particle-transport figures for all five 2-D targets (bunny, rings, rectangle, disk, outer_ring):
-
-```train
-python jko_densities.py --target all
+```
+src/       jko.py + one file per experiment
+scripts/   run_all.sh
+results/   generated per-experiment output (config.json, per_seed.csv, summary.json)
+figures/   generated PDF figures
 ```
 
-Default hyperparameters (matching the paper): `--gamma 0.08 --blocks 25 --particles 12000 --epochs 800 --seed 0`. Select a single target with `--target rings` (or any one name). Each block solves a JKO proximal step by minimising $-\mathbb{E}[\log q(T(x)) + \log|\det \nabla T(x)|] + \|T(x) - x\|^2 / (2\gamma)$ for 800 epochs with cosine-annealed Adam.
+| file | contents |
+|---|---|
+| `src/jko.py` | exact oracles (`prox_radial`, `prox_interaction`, `prox_gaussian`, `prox_quantile`), Bures/Gaussian geometry (`bw_map`, `bw_distance`, `map_defect`), the standard/accelerated schemes (`run`), paired statistics (`paired_summary`, `bootstrap_exponent`), figure style, and the correctness checks (`python src/jko.py`) |
+| `src/exp_rate.py` | **Experiment 1** — rate under vanishing curvature: blocks-to-threshold vs a degeneracy parameter `R`, exact in 1-D (quantile) and any-`d` (Gaussian); non-diffusive potential/interaction arms for the unconditional `d ≥ 2` corollary; a non-log-concave control |
+| `src/exp_inexact.py` | **Experiment 2** — inexact proximal steps: controlled per-step error `e_t ∝ t^{-p/2}`, the `Θ(Tε)` accumulation / transition at `p = 3`, and the theorem's right-hand-side bound |
+| `src/exp_geometry.py` | **Experiment 3** — where the hypotheses bind: exact Gaussian map defect for `d ≥ 2`, the measured bi-Lipschitz condition `λ_min(sym Z_{t+1})`, and the potential-vs-entropy case split |
+| `src/exp_barycenter.py` | **Experiment 4** — barycenter dual: ASGA vs SGA slope distributions over random instances, certified vs empirical step size |
+| `src/exp_neural.py` | **Experiment 5** (optional) — a qualitative neural particle-transport demonstration; the only file importing `torch` |
 
-The other three experiments use closed-form or numerical proximal steps (no training):
+## Statistics
 
-```train
-python jko_comparison.py        # 1-D Gaussians, closed-form
-python jko_lambda0.py           # double-well target, numerical L-BFGS proximal step
-python jko_asga.py              # ASGA Wasserstein barycenter on a 1-D grid
-```
+Randomness enters only through problem instances and initial conditions; standard and
+accelerated **share the instance within a seed**, so every comparison is paired. Curves are
+reported as median across seeds with a shaded IQR band; scaling exponents and method
+comparisons come with bootstrap CIs and Wilcoxon signed-rank tests over the 50 seeds. Seeds
+`0..49` index the initial condition or problem instance (the Gaussian and quantile arms are
+deterministic given their inputs). Raw per-seed output is committed so every summary is
+recomputable from the CSV without re-running.
 
-## Evaluation
+## Correctness checks
 
-Convergence is measured directly in the scripts above: `jko_densities.py` reports per-block Sinkhorn $W_2$ between particles and a reference sample from the target (via `geomloss`); the Gaussian and mixture experiments track KL in closed form or by `scipy.integrate.quad`; the ASGA experiment tracks the duality gap $I^\star - I(f^{(t)})$, with $I^\star$ estimated by a long (3000-iteration) ASGA run.
+`python src/jko.py` verifies, among others: `prox_radial` against a `scipy` reference; the
+codiagonal Gaussian prox against the general L-BFGS path; that the map defect is `0` for
+commuting (codiagonal) maps and strictly positive after a rotation; and that the accelerated
+step with `α = 1` reduces to a standard JKO step.
 
-No separate evaluation script is needed — each experiment saves its figure to `images/` on completion.
-
-## Pre-trained Models
-
-Not applicable. The JKO transport maps are re-trained from scratch per block and are not reused across runs, so no model weights are released. The closed-form and mixture experiments have no learned parameters.
-
-## Results
-
-Running the four scripts above regenerates every figure in the paper:
-
-| Script              | Output                                                      | What it shows                                                                                                                     |
-| ------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `jko_comparison.py` | `images/figure_1.pdf`, `images/figure_2.pdf`                | Closed-form 1-D Gaussians. Fig 1: $O(t^{-1})$ vs. $O(t^{-2})$ rates (weakly convex, $\lambda = 0.04$) and exponential vs. $O(t^{-2})$ rates (strongly convex, $\lambda = 1$). Fig 2: final KL vs. block count $N$ and vs. $\lambda$. |
-| `jko_lambda0.py`    | `images/figure_3.pdf`                                       | Symmetric Gaussian-mixture target with $\lambda = 0$ exactly. Accelerated JKO matches the $O(t^{-2})$ bound; standard JKO stalls at an error floor. |
-| `jko_asga.py`       | `images/figure_4.pdf`                                       | Wasserstein barycenter of four 1-D Gaussians. ASGA duality gap empirically tracks $O(t^{-2})$; SGA tracks $O(t^{-1})$.             |
-| `jko_densities.py`  | `images/particles_{bunny,rings,rectangle,disk,outer_ring}.pdf` | Neural JKO on five 2-D targets. Each figure shows particle snapshots for standard vs. accelerated JKO plus a Sinkhorn $W_2$-vs-block convergence strip. |
-
-All figures land in `images/`.
-
-## Rebuttal experiments
-
-Additional experiments probing the theory–experiment boundary. Each writes
-machine-readable results to `results/<exp_id>/{config.json,metrics.csv,summary.json}`;
-`python collate.py` builds the E4 wall-clock table and collates every marked quantity
-into `results/rebuttal_numbers.md`. Config-driven runs read `configs/*.yaml`.
-
-| Script               | Covers | What it does |
-| -------------------- | ------ | ------------ |
-| `jko_quantile.py`    | E1, E5/E6 | Nonparametric 1-D JKO in quantile coordinates (exact $W_2$, no OT solver). `--exp e1a`: hold $\lambda=0$, drive the spectral gap to zero via $V_R$; `e1b`: $\lambda=0$ KL targets (exponential decay + blocks-to-threshold + monotonicity / map-defect checks); `e1c`: non-diffusive potential/interaction functionals where the $t^{-1}$/$t^{-2}$ power laws actually appear; `e56`: adaptive restart and monotone-fallback safeguard. |
-| `jko_mixture.py`     | E3 | f2TU's asymmetric 10:1 Gaussian-mixture stress test (standard / accelerated / GD, three inits); MC-validated KL. |
-| `jko_asga_exp.py`    | E8 | Exact-prox ASGA variant, empirical-vs-certified Lipschitz constant, and $\varepsilon\times n\times m$ robustness sweep. |
-| `jko_defect2d.py`    | E7 | 2-D outer-ring map defect $\delta_t$ via `ot.emd` (POT). |
-| `jko_neural.py`      | E9 | Dimension scaling on $\lambda=0$ radial targets, $d\in\{2,5,10,20,50\}$. |
-| `jko_sweep.py`       | E10 | $\gamma\times$width$\times$depth sensitivity grid on the 2-D ring. |
-
-The GPU/particle jobs (E7, E9, E10, and the full Figure 1 run) are listed in
-`SERVER_RUNS.md`.
-
-## Contributing
-
-This code is released under the MIT License (see `LICENSE`). Issues and pull requests are welcome.
+Released under the MIT License (see `LICENSE`).

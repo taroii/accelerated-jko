@@ -1,19 +1,6 @@
-notes/
 __pycache__/
-.vscode/
-data/
-.claude/
+*.pyc
 .DS_Store
-temp/
-scratchpad/
-
-*.pt
-MNISTDiffusion/
-mnist_data/
-
+.vscode/
 old/
 paper/
-
-# generated experiment output (regenerate with the scripts + collate.py)
-results/
-images/e*.pdf

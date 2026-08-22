@@ -1,7 +1,6 @@
 numpy
 scipy
 matplotlib
-pyyaml
+# exp_neural.py only (optional, GPU demo):
 torch
 geomloss
-pot

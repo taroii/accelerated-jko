@@ -1,8 +1,0 @@
-{
-  "gamma": 0.04,
-  "blocks": 25,
-  "particles": 12000,
-  "epochs": 800,
-  "seed": 0,
-  "n_sub": 2048
-}

@@ -1,8 +1,0 @@
-{
-  "delta_t_normalized_max": 1.7926447077194005,
-  "delta_t_normalized_mean": 1.1612367543125652,
-  "accumulated_defect_term": 16.001063774084564,
-  "blocks": 25,
-  "particles": 12000,
-  "n_sub": 2048
-}
