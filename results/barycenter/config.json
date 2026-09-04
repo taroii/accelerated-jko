@@ -1,0 +1,28 @@
+{
+  "eps": [
+    0.002,
+    0.004,
+    0.008,
+    0.016
+  ],
+  "ns": [
+    60,
+    120,
+    240
+  ],
+  "ms": [
+    2,
+    4,
+    8
+  ],
+  "seeds": 50,
+  "N": 400,
+  "Nref": 1200,
+  "ep_eps": 0.008,
+  "ep_seeds": 3,
+  "ep_N": 300,
+  "ep_ref": 200,
+  "quick": false,
+  "note": "reported quantity is the fitted-slope distribution over seeds per cell",
+  "git_sha": "29e3ae8"
+}

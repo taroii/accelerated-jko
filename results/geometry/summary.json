@@ -1,0 +1,229 @@
+{
+  "config": {
+    "ds": [
+      2,
+      5,
+      10,
+      20,
+      50
+    ],
+    "kappas": [
+      1.0,
+      10.0,
+      100.0
+    ],
+    "n_seeds": 50,
+    "n_blocks": 40,
+    "gamma": 0.5,
+    "theta": 0.7853981633974483,
+    "rep_kappa": 100.0,
+    "quick": false
+  },
+  "per_dk": {
+    "d2_k1": {
+      "d": 2,
+      "kappa": 1.0,
+      "median_delta_max": 0.00054849747772252,
+      "median_delta_mean": 1.3715832518739946e-05,
+      "A_T": {
+        "median": 0.0005483983213654625,
+        "ci_lo": 1.65375161665381e-07,
+        "ci_hi": 0.0011007200920025014
+      },
+      "frac_lambda_nonpos": 0.0,
+      "gap_slope_acc": -17.283049125714083
+    },
+    "d2_k10": {
+      "d": 2,
+      "kappa": 10.0,
+      "median_delta_max": 0.007208825178622261,
+      "median_delta_mean": 0.00030237453657919644,
+      "A_T": {
+        "median": 0.0003484697191288187,
+        "ci_lo": 0.00025725432217059603,
+        "ci_hi": 0.0005658706288144801
+      },
+      "frac_lambda_nonpos": 0.0,
+      "gap_slope_acc": -6.2005421298793255
+    },
+    "d2_k100": {
+      "d": 2,
+      "kappa": 100.0,
+      "median_delta_max": 0.017980423658450317,
+      "median_delta_mean": 0.0006244830322406417,
+      "A_T": {
+        "median": 0.0006996767434445984,
+        "ci_lo": 0.0004851647173464552,
+        "ci_hi": 0.0008208979130940998
+      },
+      "frac_lambda_nonpos": 0.0,
+      "gap_slope_acc": -10.829926303208069
+    },
+    "d5_k1": {
+      "d": 5,
+      "kappa": 1.0,
+      "median_delta_max": 0.004455696408743234,
+      "median_delta_mean": 0.00014977361532605792,
+      "A_T": {
+        "median": 0.0046021703327003526,
+        "ci_lo": 0.003723808943570707,
+        "ci_hi": 0.006666977756741231
+      },
+      "frac_lambda_nonpos": 0.0,
+      "gap_slope_acc": -18.07631421700994
+    },
+    "d5_k10": {
+      "d": 5,
+      "kappa": 10.0,
+      "median_delta_max": 0.004434635697940791,
+      "median_delta_mean": 0.0002709236880541029,
+      "A_T": {
+        "median": 0.00047937760172786373,
+        "ci_lo": 0.0003057149674305992,
+        "ci_hi": 0.0006452877195834258
+      },
+      "frac_lambda_nonpos": 0.0,
+      "gap_slope_acc": -6.688080140759672
+    },
+    "d5_k100": {
+      "d": 5,
+      "kappa": 100.0,
+      "median_delta_max": 0.008010693184052495,
+      "median_delta_mean": 0.0003404951886057686,
+      "A_T": {
+        "median": 0.0005064121875605143,
+        "ci_lo": 0.0004210299087771766,
+        "ci_hi": 0.0006102136956321479
+      },
+      "frac_lambda_nonpos": 0.0,
+      "gap_slope_acc": -9.905212927102943
+    },
+    "d10_k1": {
+      "d": 10,
+      "kappa": 1.0,
+      "median_delta_max": 0.007012167121058888,
+      "median_delta_mean": 0.00017531394453456324,
+      "A_T": {
+        "median": 0.006470675393504205,
+        "ci_lo": 7.352858443503567e-07,
+        "ci_hi": 0.013237978086605151
+      },
+      "frac_lambda_nonpos": 0.0,
+      "gap_slope_acc": -17.99402672112748
+    },
+    "d10_k10": {
+      "d": 10,
+      "kappa": 10.0,
+      "median_delta_max": 0.0027492285493462797,
+      "median_delta_mean": 0.00020053204115551997,
+      "A_T": {
+        "median": 0.0003637101635422369,
+        "ci_lo": 0.00028233206758995993,
+        "ci_hi": 0.0004651526458744517
+      },
+      "frac_lambda_nonpos": 0.0,
+      "gap_slope_acc": -6.165181610167426
+    },
+    "d10_k100": {
+      "d": 10,
+      "kappa": 100.0,
+      "median_delta_max": 0.005471093350265049,
+      "median_delta_mean": 0.00023348243999145839,
+      "A_T": {
+        "median": 0.00038523999361380105,
+        "ci_lo": 0.00032477168445067605,
+        "ci_hi": 0.0004416199089695495
+      },
+      "frac_lambda_nonpos": 0.0,
+      "gap_slope_acc": -7.246720641486226
+    },
+    "d20_k1": {
+      "d": 20,
+      "kappa": 1.0,
+      "median_delta_max": 0.013213551275443818,
+      "median_delta_mean": 0.0004784485535175286,
+      "A_T": {
+        "median": 0.015527543774152063,
+        "ci_lo": 0.010898491660081935,
+        "ci_hi": 0.019616015464525398
+      },
+      "frac_lambda_nonpos": 0.0,
+      "gap_slope_acc": -16.046978305368846
+    },
+    "d20_k10": {
+      "d": 20,
+      "kappa": 10.0,
+      "median_delta_max": 0.001802441635875584,
+      "median_delta_mean": 0.00012968654495230638,
+      "A_T": {
+        "median": 0.00018649845619311622,
+        "ci_lo": 0.00014156637435552247,
+        "ci_hi": 0.0002587187552495497
+      },
+      "frac_lambda_nonpos": 0.0,
+      "gap_slope_acc": -6.203791956580898
+    },
+    "d20_k100": {
+      "d": 20,
+      "kappa": 100.0,
+      "median_delta_max": 0.0037112262426680304,
+      "median_delta_mean": 0.00016838549226122528,
+      "A_T": {
+        "median": 0.00024214669921738532,
+        "ci_lo": 0.0001716058112890949,
+        "ci_hi": 0.0003254188375439944
+      },
+      "frac_lambda_nonpos": 0.0,
+      "gap_slope_acc": -7.065083204391687
+    },
+    "d50_k1": {
+      "d": 50,
+      "kappa": 1.0,
+      "median_delta_max": 0.016151087515027536,
+      "median_delta_mean": 0.0004708670503776602,
+      "A_T": {
+        "median": 0.013945246934228413,
+        "ci_lo": 1.1880200514804586e-06,
+        "ci_hi": 0.025614106307510084
+      },
+      "frac_lambda_nonpos": 0.0,
+      "gap_slope_acc": -16.953785411573318
+    },
+    "d50_k10": {
+      "d": 50,
+      "kappa": 10.0,
+      "median_delta_max": 0.00107529784247525,
+      "median_delta_mean": 7.82583933366571e-05,
+      "A_T": {
+        "median": 0.00011800631589666693,
+        "ci_lo": 0.00010850719878760578,
+        "ci_hi": 0.00018506958132865551
+      },
+      "frac_lambda_nonpos": 0.0,
+      "gap_slope_acc": -6.294796935298355
+    },
+    "d50_k100": {
+      "d": 50,
+      "kappa": 100.0,
+      "median_delta_max": 0.002267506713355486,
+      "median_delta_mean": 9.645794910454574e-05,
+      "A_T": {
+        "median": 0.0001590267271175935,
+        "ci_lo": 0.000129443200061561,
+        "ci_hi": 0.00018875013914064237
+      },
+      "frac_lambda_nonpos": 0.0,
+      "gap_slope_acc": -6.917539604295578
+    }
+  },
+  "defect_and_rate": {
+    "median_gap_slope_acc": -7.246720641486226,
+    "note": "map defect grows with d and kappa (see per_dk); accelerated gap slope stays near -2 on these always-convergent Gaussian targets. Descriptive: the design cannot exhibit a rate collapse, only bound the defect."
+  },
+  "headline": {
+    "d": 50,
+    "kappa": 100.0,
+    "median_max_defect": 0.002267506713355486,
+    "median_gap_slope_acc": -6.917539604295578
+  }
+}

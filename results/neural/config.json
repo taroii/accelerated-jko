@@ -1,0 +1,27 @@
+{
+  "kind": "qualitative neural JKO demonstration (target outside theory)",
+  "target": "outer_ring  q ~ exp(-((r-0.75)^2)/(2*0.07^2))",
+  "gamma": 0.04,
+  "n_blocks": 25,
+  "n_particles": 12000,
+  "n_epochs": 800,
+  "n_seeds": 10,
+  "rep_seed": 0,
+  "init": "x0 ~ N(0, 1.5^2 I)",
+  "clamp_x": [
+    -2.5,
+    2.5
+  ],
+  "clamp_z": [
+    -3.5,
+    3.5
+  ],
+  "optimizer": "Adam lr=2e-3 cosine to 1e-4, batch 1024, grad clip 5.0",
+  "transport_map": "residual MLP 2->256->256->256->2 SiLU zero-init last",
+  "logdet": "exact via torch.func jacrev/vmap slogdet",
+  "extrapolation": "y_t=(1-a)x_t+a z_t, a=3/(t+3); z_{t+1}=z_t+(x_{t+1}-y_t)/a",
+  "w2_metric": "geomloss Sinkhorn p=2 blur=0.01 scaling=0.95 (approx W2)",
+  "w2_ref_samples": 4096,
+  "device": "cuda",
+  "git_sha": "29e3ae8"
+}
