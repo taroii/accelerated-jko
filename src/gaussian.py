@@ -1,0 +1,182 @@
+"""Exact Gaussian machinery (spec section 0.4): d = 2, centered Gaussians, maps from the
+reference nu = N(0, Zc) are 2x2 matrices. Restricted proximal step over SPD maps, the JKO
+step, and the four schemes compared in E1."""
+import numpy as np
+from numpy.linalg import inv, slogdet
+from scipy.optimize import least_squares, minimize
+
+I2 = np.eye(2)
+
+
+def sym(M):
+    return 0.5 * (M + M.T)
+
+
+def sqrtm_spd(S):
+    w, V = np.linalg.eigh(sym(S))
+    return (V * np.sqrt(np.maximum(w, 0.0))) @ V.T
+
+
+def ot_map(A, B):
+    """Optimal map N(0,A) -> N(0,B): T = A^{-1/2} (A^{1/2} B A^{1/2})^{1/2} A^{-1/2}, SPD, T A T = B."""
+    r = sqrtm_spd(A)
+    ri = inv(r)
+    return sym(ri @ sqrtm_spd(r @ B @ r) @ ri)
+
+
+def w2sq(A, B):
+    r = sqrtm_spd(A)
+    return float(np.trace(A) + np.trace(B) - 2 * np.trace(sqrtm_spd(r @ B @ r)))
+
+
+def kl(S, Q):
+    """KL(N(0,S) | N(0,Q))."""
+    M = inv(Q) @ S
+    return float(0.5 * (np.trace(M) - 2 - slogdet(M)[1]))
+
+
+def norm2_nu(M, Zc):
+    """||M||^2_nu = tr(M Zc M^T)."""
+    return float(np.trace(M @ Zc @ M.T))
+
+
+def _chol_to_spd(p):
+    L = np.array([[np.exp(p[0]), 0.0], [p[1], np.exp(p[2])]])
+    return L @ L.T, L
+
+
+def _spd_to_chol(S):
+    L = np.linalg.cholesky(sym(S))
+    return np.array([np.log(L[0, 0]), L[1, 0], np.log(L[1, 1])])
+
+
+#  ------------------------------------------------------------------ restricted prox
+def _prox_obj(S, Y, gamma, Zc, Qi):
+    D = S - Y
+    return 0.5 * (np.trace(Qi @ S @ Zc @ S) - 2 - slogdet(Qi)[1] - 2 * slogdet(S)[1] - slogdet(Zc)[1]) \
+        + np.trace(D @ Zc @ D.T) / (2 * gamma)
+
+
+def prox_kkt(S, Y, gamma, Zc, Qi):
+    """Gradient of the proximal objective w.r.t. S, projected onto symmetric matrices."""
+    return sym(0.5 * (Qi @ S @ Zc + Zc @ S @ Qi) - inv(S) + (S - Y) @ Zc / gamma)
+
+
+def restricted_prox(Y, gamma, Zc, Q, S_init):
+    """argmin over SPD S of KL(S Zc S | Q) + tr((S-Y) Zc (S-Y)^T)/(2 gamma), to machine precision.
+
+    BFGS on the Cholesky parameters (analytic gradient) from the warm start, a Nelder–Mead polish
+    as in the spec, then Newton on the 3x3 KKT system. Returns (S, ||KKT||_F)."""
+    Qi = inv(Q)
+
+    def fg(p):
+        S, L = _chol_to_spd(p)
+        GL = 2 * prox_kkt(S, Y, gamma, Zc, Qi) @ L
+        return _prox_obj(S, Y, gamma, Zc, Qi), np.array([GL[0, 0] * L[0, 0], GL[1, 0], GL[1, 1] * L[1, 1]])
+
+    p = minimize(fg, _spd_to_chol(S_init), jac=True, method="BFGS", options=dict(gtol=1e-13, maxiter=2000)).x
+    p = minimize(lambda q: fg(q)[0], p, method="Nelder-Mead",
+                 options=dict(xatol=1e-13, fatol=1e-15, maxiter=2000)).x
+    S = _chol_to_spd(p)[0]
+    # Newton polish on sym-grad(S) = 0 in the coordinates (s11, s12, s22)
+    basis = [np.array([[1.0, 0], [0, 0]]), np.array([[0, 1.0], [1.0, 0]]), np.array([[0, 0], [0, 1.0]])]
+    vec = lambda M: np.array([M[0, 0], M[0, 1], M[1, 1]])
+    res = np.linalg.norm(prox_kkt(S, Y, gamma, Zc, Qi))
+    for _ in range(50):
+        Si = inv(S)
+        Jm = np.stack([vec(sym(0.5 * (Qi @ E @ Zc + Zc @ E @ Qi) + Si @ E @ Si + E @ Zc / gamma))
+                       for E in basis], 1)
+        d = np.linalg.solve(Jm, -vec(prox_kkt(S, Y, gamma, Zc, Qi)))
+        D = np.array([[d[0], d[1]], [d[1], d[2]]])
+        al, improved = 1.0, False
+        while al > 1e-4:
+            Sn = S + al * D
+            if np.linalg.eigvalsh(Sn).min() > 0:
+                rn = np.linalg.norm(prox_kkt(Sn, Y, gamma, Zc, Qi))
+                if rn < res:
+                    S, res, improved = Sn, rn, True
+                    break
+            al *= 0.5
+        if not improved:
+            break
+    return sym(S), float(res)
+
+
+#  ------------------------------------------------------------------ JKO step
+def jko_step(Sy, gamma, Q):
+    """argmin_S KL(S|Q) + W2^2(S, Sy)/(2 gamma): solve M S M = Sy with M = I + gamma (Q^{-1} - S^{-1}) SPD.
+    Returns (S, residual)."""
+    Qi = inv(Q)
+
+    def resid(p):
+        S = _chol_to_spd(p)[0]
+        M = I2 + gamma * (Qi - inv(S))
+        R = M @ S @ M - Sy
+        return np.array([R[0, 0], R[0, 1], R[1, 1]])
+
+    tol = 1e-9 * max(1.0, np.abs(Sy).max())
+    best = None
+    for S0 in (Sy, Q, 0.5 * (Sy + Q)):
+        sol = least_squares(resid, _spd_to_chol(S0), xtol=1e-15, ftol=1e-15, gtol=1e-15)
+        S = _chol_to_spd(sol.x)[0]
+        M = I2 + gamma * (Qi - inv(S))
+        r = float(np.abs(resid(sol.x)).max())
+        if np.linalg.eigvalsh(sym(M)).min() > 0 and r < tol:
+            return sym(S), r
+        if best is None or r < best[1]:
+            best = (S, r)
+    raise RuntimeError(f"JKO step not solved (best residual {best[1]:.2e})")
+
+
+#  ------------------------------------------------------------------ the four schemes of E1
+def run_fixed_reference(Zc, Q, gamma, T, accel):
+    """Algorithm 1 (accel) or the fixed-reference minimizing movement, exact restricted prox.
+    Returns gap_t, ||Z_t - P||_nu for t = 0..T, and the largest KKT residual."""
+    P = ot_map(Zc, Q)
+    X = I2.copy()
+    Z = I2.copy()
+    gap = [kl(X @ Zc @ X.T, Q)]
+    zdist = [np.sqrt(norm2_nu(Z - P, Zc))]
+    kkt = 0.0
+    for t in range(T):
+        a = 2.0 / (t + 2) if accel else 1.0
+        Y = (1 - a) * X + a * Z
+        X1, r = restricted_prox(Y, gamma, Zc, Q, X)
+        kkt = max(kkt, r)
+        Z = Z + (X1 - Y) / a
+        X = X1
+        gap.append(kl(X @ Zc @ X.T, Q))
+        zdist.append(np.sqrt(norm2_nu(Z - P, Zc)))
+    return np.array(gap), np.array(zdist), kkt
+
+
+def run_moving_reference(Zc, Q, gamma, T):
+    """Moving-reference scheme (paper eq. (16)): a genuine JKO step from the extrapolated measure."""
+    Zt = Zc.copy()
+    Sx = Zc.copy()
+    gap = [kl(Sx, Q)]
+    res = 0.0
+    for t in range(T):
+        a = 2.0 / (t + 2)
+        X = ot_map(Zt, Sx)
+        Y = (1 - a) * X + a * I2
+        Sy = sym(Y @ Zt @ Y.T)
+        Sx, r = jko_step(Sy, gamma, Q)
+        res = max(res, r)
+        X1 = ot_map(Sy, Sx) @ Y
+        W = I2 + (X1 - Y) / a
+        Zt = sym(W @ Zt @ W.T)
+        gap.append(kl(Sx, Q))
+    return np.array(gap), res
+
+
+def run_jko(Zc, Q, gamma, T):
+    """Plain JKO: x_{t+1} = JKO(x_t)."""
+    Sx = Zc.copy()
+    gap = [kl(Sx, Q)]
+    res = 0.0
+    for t in range(T):
+        Sx, r = jko_step(Sx, gamma, Q)
+        res = max(res, r)
+        gap.append(kl(Sx, Q))
+    return np.array(gap), res

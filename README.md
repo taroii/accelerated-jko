@@ -1,9 +1,10 @@
-# Accelerated Proximal Optimization in Wasserstein and Sobolev Spaces
+# Accelerated Proximal Optimization in Wasserstein Space with a Fixed Reference Measure
 
-Reference implementation and experiments for the accelerated JKO / Sobolev-gradient-ascent
-framework. The suite validates the theory with **exact proximal oracles in arbitrary
-dimension** — no neural network and no sampling-based OT solver on the critical path — so
-every quantitative result is deterministic given its inputs and runs on a CPU.
+Code for the experiments of Section 6 (E1–E4). The specification the code implements is
+`handoff/experiments/EXPERIMENTS.md`; the write-up is `handoff/paper/`.
+
+Everything is CPU, float64, deterministic (no random numbers enter any experiment), and needs
+only numpy, scipy and matplotlib.
 
 ## Install
 
@@ -11,62 +12,73 @@ every quantitative result is deterministic given its inputs and runs on a CPU.
 pip install -r requirements.txt          # numpy scipy matplotlib
 ```
 
-`torch` and `geomloss` are needed only for the optional neural demonstration
-(`exp_neural.py`); the four quantitative experiments do not use them.
-
 ## Reproduce
 
 ```
-./scripts/run_all.sh                 # 50 seeds, CPU, well under an hour
-QUICK=1 ./scripts/run_all.sh         # 2-seed smoke test, < 2 minutes
-SEEDS=20 ./scripts/run_all.sh        # custom seed count
-WITH_NEURAL=1 ./scripts/run_all.sh   # also runs the optional GPU demo
+./scripts/run_all.sh                 # unit tests, then E2 -> E1 -> E3 -> E4, full spec, into results/
+QUICK=1 ./scripts/run_all.sh         # smoke test (small grids, few steps) into results_smoke/, about a minute
+JOBS=12 ./scripts/run_all.sh         # E3 targets / E4 configurations in parallel processes
+EXPS="e2 e3" ./scripts/run_all.sh    # only the named experiments
+PYTHON=/path/to/python ./scripts/run_all.sh
 ```
 
-`run_all.sh` first runs `python src/jko.py`, the correctness suite (Section below); it aborts
-if any check fails. Each experiment writes `results/<exp>/{config.json,per_seed.csv,summary.json}`
-and its figure into `paper/<exp>.pdf` (so the `paper/` folder can be copied straight to
-Overleaf). Summaries and the scalar/curve figures are regenerable from `per_seed.csv`;
-the barycenter reference curves and the neural particle snapshots additionally need the
-saved `summary.json` / a full run:
+The unit tests run first and the script aborts if any fails. E2 must run before E3/E4: it
+writes the channel ratio `results/e2/r_best.json` that they read (they fall back to 10 and say
+so if the file is missing). Each script also runs on its own with no arguments
+(`python src/e3_end_to_end.py`); the defaults are the spec.
 
-```
-python src/exp_rate.py --from-csv results/rate/per_seed.csv
-```
+Rough single-core cost: unit tests 10 s, E1 1 min, E2 4 min, E3 minutes to an hour, E4 the
+slowest (12 runs x 80 outer steps x up to 2000 inner iterations) — use `JOBS`.
 
 ## Layout
 
 ```
-src/       jko.py + one file per experiment
-scripts/   run_all.sh
-results/   generated per-experiment output (config.json, per_seed.csv, summary.json)
-paper/     temp.tex + generated PDF figures (copy to Overleaf)
+src/        shared modules, unit tests, one script per experiment
+scripts/    run_all.sh
+results/    e1/ e2/ e3/ e4/ — each with <exp>.npz (raw curves), fig_*.pdf/png, results.md; unit_tests.txt
+handoff/    the specification, the paper source, and the earlier prototypes
 ```
 
 | file | contents |
 |---|---|
-| `src/jko.py` | exact oracles (`prox_radial`, `prox_interaction`, `prox_gaussian`, `prox_quantile`), Bures/Gaussian geometry (`bw_map`, `bw_distance`, `map_defect`), the standard/accelerated schemes (`run`), paired statistics (`paired_summary`, `bootstrap_exponent`), figure style, and the correctness checks (`python src/jko.py`) |
-| `src/exp_rate.py` | **Experiment 1** — rate under vanishing curvature: blocks-to-threshold vs a degeneracy parameter `R`, exact in 1-D (quantile) and any-`d` (Gaussian); non-diffusive potential/interaction arms for the unconditional `d ≥ 2` corollary; a non-log-concave control |
-| `src/exp_inexact.py` | **Experiment 2** — inexact proximal steps: controlled per-step error `e_t ∝ t^{-p/2}`, the `Θ(Tε)` accumulation / transition at `p = 3`, and the theorem's right-hand-side bound |
-| `src/exp_geometry.py` | **Experiment 3** — where the hypotheses bind: exact Gaussian map defect vs `d`, the measured bi-Lipschitz condition `λ_min(sym Z_{t+1})`. The potential-vs-entropy case split is exhibited by the potential/interaction arms of `exp_rate.py` |
-| `src/exp_barycenter.py` | **Experiment 4** — barycenter dual: ASGA vs SGA slope distributions over random instances, certified vs empirical step size |
-| `src/exp_neural.py` | **Experiment 5** (optional) — a qualitative neural particle-transport demonstration; the only file importing `torch` |
+| `src/grid.py` | cosine-series collocation on `[0,1]^2`: `K1` (Hessian), `K2` (gradient), `B` (`K1 = B K2`), exact adjoints; targets `Gauss`, `Quartic`, `Mix2` with their pointwise transport solves and conjugates |
+| `src/pdhg.py` | Algorithm 2 (two-channel spectrally preconditioned PDHG, plus the scalar-step baseline), the duality certificate, and Algorithm 1 on the grid (`run_outer`) |
+| `src/gaussian.py` | exact 2x2 Gaussian machinery: OT maps, restricted proximal step over SPD maps, JKO step, the four schemes of E1 |
+| `src/common.py` | output paths, plot style, reference curves and the bound of Theorem 1 |
+| `src/test_units.py` | transforms, adjoints, multipliers, proxes, conjugates, weak duality, Gaussian solvers |
+| `src/e1_gaussian_rates.py` | **E1** — rates with exact steps; lambda sweep |
+| `src/e2_inner_solver.py` | **E2** — inner solver: scalar vs preconditioned, channel ratio, balanced steps, n-scaling, certificate |
+| `src/e3_end_to_end.py` | **E3** — outer scheme with the inner solver, certified schedule vs fixed budget |
+| `src/e4_mixture.py` | **E4** — non-log-concave mixture target, three reference measures |
 
-## Statistics
+## Status of `results/`
 
-Randomness enters only through problem instances and initial conditions; standard and
-accelerated **share the instance within a seed**, so every comparison is paired. Curves are
-reported as median across seeds with a shaded IQR band; scaling exponents and method
-comparisons come with bootstrap CIs and Wilcoxon signed-rank tests over the 50 seeds. Seeds
-`0..49` index the initial condition or problem instance (the Gaussian and quantile arms are
-deterministic given their inputs). Raw per-seed output is committed so every summary is
-recomputable from the CSV without re-running.
+`results/e1` and `results/e2` are full spec runs. E3 and E4 have only been smoke-tested
+(`QUICK=1`); their full runs are still to be done.
 
-## Correctness checks
+## Deviations from the spec
 
-`python src/jko.py` verifies, among others: `prox_radial` against a `scipy` reference; the
-codiagonal Gaussian prox against the general L-BFGS path; that the map defect is `0` for
-commuting (codiagonal) maps and strictly positive after a rotation; and that the accelerated
-step with `α = 1` reduces to a standard JKO step.
+1. **Certificate (Remark 4).** The certificate as specified,
+   `J - (-h1*(Lam) - h2*(mu) - R ||B^T Lam + mu||_1)`, is a valid bound but does not vanish:
+   at a saddle point only `K2^T (B^T Lam + mu) = 0` holds, and `r = B^T Lam + mu` keeps a
+   component orthogonal to gradient fields (it stays at about 3.3 and 1.6 on the two E2 targets).
+   Because `<K2 psi, r> = <K2 psi, P r>` with `P` the orthogonal projection onto `range(K2)`,
+   `R ||P r||_1` is an equally valid bound, costs one more DCT pair, and does go to zero. All
+   stopping rules use the projected certificate; E2 records both.
+2. **Restricted Gaussian prox.** BFGS and the Nelder–Mead polish are as specified, followed by
+   a Newton iteration on the 3x3 KKT system, which is what brings the residual to ~1e-15.
+3. **Normalisation.** `V` includes `log Z`, so `q = e^{-V}` is a density on the box and
+   `G = KL(x | q)`. Gaps are unaffected.
+4. **Feasibility.** An iterate counts as admissible only if, in addition to `I + Hess psi > 0`,
+   the map stays in the box at every cell (`V = +inf` outside).
+5. **Weights.** Cell weights are stored as `nu(x)/mean(nu)` (1 for the uniform reference);
+   reported objectives, gaps, certificates and tolerances are multiplied by `h^2`.
+6. **1-D transport solve.** Bracketed Newton run to convergence (bisection whenever a step
+   leaves the bracket) rather than exactly 10 Newton steps.
+7. **`r_best`** is the argmin of iterations-to-1e-6 summed over the two E2 targets.
+8. **E4.** The mixture conjugate `h2*` is a best-of-two-starts local maximisation, so the
+   certificate is only a heuristic stopping rule there. The gap figure has one panel per mixture
+   weight instead of a single 12-curve panel.
+9. **`--jobs`** (off by default) runs independent configurations in separate processes.
 
 Released under the MIT License (see `LICENSE`).

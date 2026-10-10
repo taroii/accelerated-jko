@@ -1,6 +1,3 @@
 numpy
 scipy
 matplotlib
-# exp_neural.py only (optional, GPU demo):
-torch
-geomloss
