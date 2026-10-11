@@ -2,19 +2,72 @@
 reference nu = N(0, Zc) are 2x2 matrices. Restricted proximal step over SPD maps, the JKO
 step, and the four schemes compared in E1."""
 import numpy as np
-from numpy.linalg import inv, slogdet
 from scipy.optimize import least_squares, minimize
 
 I2 = np.eye(2)
 
 
+#  ------------------------------------------------------------------ closed-form 2x2 linear algebra
+# (the hot loops call these millions of times; closed forms are exact to round-off and avoid LAPACK)
 def sym(M):
     return 0.5 * (M + M.T)
 
 
+def det2(M):
+    return M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]
+
+
+def inv(M):
+    d = det2(M)
+    if d == 0 or not np.isfinite(d):
+        raise np.linalg.LinAlgError("singular 2x2 matrix")
+    return np.array([[M[1, 1], -M[0, 1]], [-M[1, 0], M[0, 0]]]) / d
+
+
+def logdet(M):
+    d = det2(M)
+    if not d > 0:
+        raise np.linalg.LinAlgError("non-positive determinant")
+    return np.log(d)
+
+
+def min_eig(S):
+    """Smallest eigenvalue of a symmetric 2x2 matrix."""
+    return 0.5 * (S[0, 0] + S[1, 1]) - np.sqrt(0.25 * (S[0, 0] - S[1, 1]) ** 2 + S[0, 1] ** 2)
+
+
 def sqrtm_spd(S):
-    w, V = np.linalg.eigh(sym(S))
-    return (V * np.sqrt(np.maximum(w, 0.0))) @ V.T
+    """Square root of a symmetric positive semidefinite 2x2 matrix: (S + sqrt(det) I)/sqrt(tr + 2 sqrt(det))."""
+    S = sym(S)
+    r = np.sqrt(max(det2(S), 0.0))
+    t = np.sqrt(max(S[0, 0] + S[1, 1] + 2 * r, 0.0))
+    if t == 0:
+        return np.zeros((2, 2))
+    return (S + r * I2) / t
+
+
+def chol(S):
+    """Lower Cholesky factor of an SPD 2x2 matrix."""
+    if not (S[0, 0] > 0 and det2(S) > 0):
+        raise np.linalg.LinAlgError("matrix not positive definite")
+    a = np.sqrt(S[0, 0])
+    b = S[1, 0] / a
+    return np.array([[a, 0.0], [b, np.sqrt(S[1, 1] - b * b)]])
+
+
+def fro(M):
+    return float(np.sqrt((M * M).sum()))
+
+
+def solve3(A, b):
+    """3x3 solve by the adjugate (Newton self-corrects the round-off)."""
+    c0 = np.cross(A[1], A[2])
+    c1 = np.cross(A[2], A[0])
+    c2 = np.cross(A[0], A[1])
+    d = A[0] @ c0
+    if d == 0 or not np.isfinite(d):
+        raise np.linalg.LinAlgError("singular 3x3 matrix")
+    return (c0 * b[0] + c1 * b[1] + c2 * b[2]) / d
 
 
 def ot_map(A, B):
@@ -32,7 +85,7 @@ def w2sq(A, B):
 def kl(S, Q):
     """KL(N(0,S) | N(0,Q))."""
     M = inv(Q) @ S
-    return float(0.5 * (np.trace(M) - 2 - slogdet(M)[1]))
+    return float(0.5 * (np.trace(M) - 2 - logdet(M)))
 
 
 def norm2_nu(M, Zc):
@@ -46,14 +99,14 @@ def _chol_to_spd(p):
 
 
 def _spd_to_chol(S):
-    L = np.linalg.cholesky(sym(S))
+    L = chol(sym(S))
     return np.array([np.log(L[0, 0]), L[1, 0], np.log(L[1, 1])])
 
 
 #  ------------------------------------------------------------------ restricted prox
 def _prox_obj(S, Y, gamma, Zc, Qi):
     D = S - Y
-    return 0.5 * (np.trace(Qi @ S @ Zc @ S) - 2 - slogdet(Qi)[1] - 2 * slogdet(S)[1] - slogdet(Zc)[1]) \
+    return 0.5 * (np.trace(Qi @ S @ Zc @ S) - 2 - logdet(Qi) - 2 * logdet(S) - logdet(Zc)) \
         + np.trace(D @ Zc @ D.T) / (2 * gamma)
 
 
@@ -81,18 +134,18 @@ def restricted_prox(Y, gamma, Zc, Q, S_init):
     # Newton polish on sym-grad(S) = 0 in the coordinates (s11, s12, s22)
     basis = [np.array([[1.0, 0], [0, 0]]), np.array([[0, 1.0], [1.0, 0]]), np.array([[0, 0], [0, 1.0]])]
     vec = lambda M: np.array([M[0, 0], M[0, 1], M[1, 1]])
-    res = np.linalg.norm(prox_kkt(S, Y, gamma, Zc, Qi))
+    res = fro(prox_kkt(S, Y, gamma, Zc, Qi))
     for _ in range(50):
         Si = inv(S)
         Jm = np.stack([vec(sym(0.5 * (Qi @ E @ Zc + Zc @ E @ Qi) + Si @ E @ Si + E @ Zc / gamma))
                        for E in basis], 1)
-        d = np.linalg.solve(Jm, -vec(prox_kkt(S, Y, gamma, Zc, Qi)))
+        d = solve3(Jm, -vec(prox_kkt(S, Y, gamma, Zc, Qi)))
         D = np.array([[d[0], d[1]], [d[1], d[2]]])
         al, improved = 1.0, False
         while al > 1e-4:
             Sn = S + al * D
-            if np.linalg.eigvalsh(Sn).min() > 0:
-                rn = np.linalg.norm(prox_kkt(Sn, Y, gamma, Zc, Qi))
+            if min_eig(Sn) > 0:
+                rn = fro(prox_kkt(Sn, Y, gamma, Zc, Qi))
                 if rn < res:
                     S, res, improved = Sn, rn, True
                     break
@@ -121,7 +174,7 @@ def jko_step(Sy, gamma, Q):
         S = _chol_to_spd(sol.x)[0]
         M = I2 + gamma * (Qi - inv(S))
         r = float(np.abs(resid(sol.x)).max())
-        if np.linalg.eigvalsh(sym(M)).min() > 0 and r < tol:
+        if min_eig(sym(M)) > 0 and r < tol:
             return sym(S), r
         if best is None or r < best[1]:
             best = (S, r)

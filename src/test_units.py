@@ -214,6 +214,16 @@ def test_gaussian_ot():
     check("OT map: T A T = B", worst, 1e-10)
     check("W2^2(A,B) = ||T - I||_A^2", worst_w, 1e-10)
     check("KL(S|S) = 0", abs(ga.kl(A, A)), 1e-13)
+    worst = 0.0
+    for _ in range(50):                         # closed-form 2x2 helpers against LAPACK
+        A = _rand_spd()
+        M = RNG.normal(size=(2, 2))
+        worst = max(worst, np.abs(ga.inv(M) - np.linalg.inv(M)).max() / np.abs(np.linalg.inv(M)).max(),
+                    np.abs(ga.sqrtm_spd(A) @ ga.sqrtm_spd(A) - A).max(), np.abs(ga.chol(A) - np.linalg.cholesky(A)).max(),
+                    abs(ga.min_eig(A) - np.linalg.eigvalsh(A)[0]), abs(ga.logdet(A) - np.linalg.slogdet(A)[1]))
+        J3, b3 = RNG.normal(size=(3, 3)), RNG.normal(size=3)
+        worst = max(worst, np.abs(ga.solve3(J3, b3) - np.linalg.solve(J3, b3)).max() / np.abs(np.linalg.solve(J3, b3)).max())
+    check("closed-form 2x2 inverse / sqrt / Cholesky / eig / logdet, 3x3 solve", worst, 1e-10)
 
 
 def test_gaussian_restricted_prox():
