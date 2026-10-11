@@ -1,8 +1,12 @@
 """Shared helpers for the experiment scripts: output paths, plot style (spec 0.8), reference
 curves and the bound of Theorem 1 (spec 0.2), and small reporting utilities."""
+import faulthandler
 import os
+import sys
 import time
 from multiprocessing import Pool
+
+faulthandler.enable(file=sys.stderr, all_threads=True)      # a hard crash prints the Python stack that caused it
 
 # one numerical thread per process: worker processes inherit this, so N jobs use N cores, not N x cores
 for _v in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
@@ -38,9 +42,15 @@ def gentle():
     try:
         os.nice(10)
     except AttributeError:                                   # Windows
-        import ctypes
-        k32 = ctypes.windll.kernel32
-        k32.SetPriorityClass(k32.GetCurrentProcess(), 0x4000)   # BELOW_NORMAL_PRIORITY_CLASS
+        try:
+            import ctypes
+            from ctypes import wintypes
+            k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            k32.GetCurrentProcess.restype = wintypes.HANDLE
+            k32.SetPriorityClass.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+            k32.SetPriorityClass(k32.GetCurrentProcess(), 0x4000)   # BELOW_NORMAL_PRIORITY_CLASS
+        except Exception:
+            pass
     except OSError:
         pass
 
