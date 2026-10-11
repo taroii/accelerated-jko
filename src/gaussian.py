@@ -129,6 +129,14 @@ def jko_step(Sy, gamma, Q):
 
 
 #  ------------------------------------------------------------------ the four schemes of E1
+_FAIL = (RuntimeError, np.linalg.LinAlgError, ValueError, FloatingPointError)
+
+
+def _pad(vals, T):
+    """A failed solve ends the run: the remaining steps are NaN."""
+    return np.array(list(vals) + [np.nan] * (T + 1 - len(vals)))
+
+
 def run_fixed_reference(Zc, Q, gamma, T, accel):
     """Algorithm 1 (accel) or the fixed-reference minimizing movement, exact restricted prox.
     Returns gap_t, ||Z_t - P||_nu for t = 0..T, and the largest KKT residual."""
@@ -141,7 +149,10 @@ def run_fixed_reference(Zc, Q, gamma, T, accel):
     for t in range(T):
         a = 2.0 / (t + 2) if accel else 1.0
         Y = (1 - a) * X + a * Z
-        X1, r = restricted_prox(Y, gamma, Zc, Q, X)
+        try:
+            X1, r = restricted_prox(Y, gamma, Zc, Q, X)
+        except _FAIL:
+            return _pad(gap, T), _pad(zdist, T), kkt
         kkt = max(kkt, r)
         Z = Z + (X1 - Y) / a
         X = X1
@@ -161,9 +172,12 @@ def run_moving_reference(Zc, Q, gamma, T):
         X = ot_map(Zt, Sx)
         Y = (1 - a) * X + a * I2
         Sy = sym(Y @ Zt @ Y.T)
-        Sx, r = jko_step(Sy, gamma, Q)
+        try:
+            Sx, r = jko_step(Sy, gamma, Q)
+            X1 = ot_map(Sy, Sx) @ Y
+        except _FAIL:
+            return _pad(gap, T), res
         res = max(res, r)
-        X1 = ot_map(Sy, Sx) @ Y
         W = I2 + (X1 - Y) / a
         Zt = sym(W @ Zt @ W.T)
         gap.append(kl(Sx, Q))
@@ -176,7 +190,10 @@ def run_jko(Zc, Q, gamma, T):
     gap = [kl(Sx, Q)]
     res = 0.0
     for t in range(T):
-        Sx, r = jko_step(Sx, gamma, Q)
+        try:
+            Sx, r = jko_step(Sx, gamma, Q)
+        except _FAIL:
+            return _pad(gap, T), res
         res = max(res, r)
         gap.append(kl(Sx, Q))
     return np.array(gap), res

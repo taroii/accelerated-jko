@@ -1,6 +1,7 @@
 """Shared helpers for the experiment scripts: output paths, plot style (spec 0.8), reference
 curves and the bound of Theorem 1 (spec 0.2), and small reporting utilities."""
 import os
+from multiprocessing import Pool
 
 import numpy as np
 import matplotlib as mpl
@@ -67,3 +68,96 @@ def md_table(header, rows):
     out = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
     out += ["| " + " | ".join(fmt(c) if not isinstance(c, str) else c for c in r) + " |" for r in rows]
     return "\n".join(out) + "\n"
+
+
+#  ------------------------------------------------------------------ ensembles over random instances
+def run_seeds(work, seeds, cfg, jobs, cache, resume=False):
+    """Run `work((seed, cfg)) -> (seed, dict of arrays)` for every seed, `jobs` processes at a time.
+    Each finished seed is saved to `cache`/seed_XXX.npz at once, so an interrupted ensemble can be
+    continued with resume=True (only valid if the configuration is unchanged)."""
+    os.makedirs(cache, exist_ok=True)
+    path = lambda s: os.path.join(cache, f"seed_{s:03d}.npz")
+    res, todo = {}, []
+    for s in seeds:
+        if resume and os.path.exists(path(s)):
+            with np.load(path(s)) as f:
+                res[s] = {k: f[k] for k in f.files}
+        else:
+            todo.append((s, cfg))
+
+    def done(s, out):
+        np.savez_compressed(path(s), **out)
+        res[s] = {k: np.asarray(v) for k, v in out.items()}
+        print(f"  seed {s} done ({len(res)}/{len(seeds)})", flush=True)
+
+    if jobs > 1 and len(todo) > 1:
+        with Pool(min(jobs, len(todo))) as pool:
+            for s, out in pool.imap_unordered(work, todo):
+                done(s, out)
+    else:
+        for job in todo:
+            done(*work(job))
+    return [res[s] for s in seeds]
+
+
+def stack(res, key):
+    return np.stack([np.asarray(r[key], float) for r in res])
+
+
+def band(a):
+    """Median and 2.5 / 97.5 percentiles over instances (axis 0); inf = not finite / not reached."""
+    a = np.asarray(a, float)
+    with np.errstate(invalid="ignore"):
+        lo, med, hi = np.nanpercentile(a, [2.5, 50, 97.5], axis=0, method="nearest")
+    return med, lo, hi
+
+
+def plot_band(ax, x, a, color, label, lo_floor=FLOOR, ls="-"):
+    med, lo, hi = band(a)
+    ok = np.isfinite(med)
+    ax.plot(np.asarray(x)[ok], np.maximum(med[ok], lo_floor), ls, color=color, label=label)
+    ok = np.isfinite(hi) & np.isfinite(lo)
+    ax.fill_between(np.asarray(x)[ok], np.maximum(lo[ok], lo_floor), np.maximum(hi[ok], lo_floor),
+                    color=color, alpha=0.18, lw=0)
+
+
+def _boot(x, stat, B=2000):
+    x = np.asarray(x, float)
+    x = x[~np.isnan(x)]
+    if x.size == 0:
+        return np.nan, np.nan, np.nan
+    idx = np.random.default_rng(0).integers(0, x.size, size=(B, x.size))
+    with np.errstate(invalid="ignore"):
+        lo, hi = np.percentile(stat(x[idx], axis=1), [2.5, 97.5], method="nearest")
+    return float(stat(x)), float(lo), float(hi)
+
+
+def boot_mean(x):
+    """Mean with a 95% percentile-bootstrap CI of the mean (2000 resamples)."""
+    return _boot(x, np.mean)
+
+
+def boot_median(x):
+    """Median with a 95% bootstrap CI of the median; right-censored values enter as +inf."""
+    return _boot(x, lambda a, axis=None: np.percentile(a, 50, axis=axis, method="lower"))
+
+
+def wilson(k, n, z=1.959964):
+    """Wilson 95% interval for a proportion k/n."""
+    if n == 0:
+        return np.nan, np.nan
+    p = k / n
+    c = (p + z * z / (2 * n)) / (1 + z * z / n)
+    hw = z * np.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / (1 + z * z / n)
+    return max(0.0, c - hw), min(1.0, c + hw)
+
+
+def ci(t, f="{:.3g}"):
+    g = lambda v: "inf" if np.isinf(v) else f.format(v)
+    return f"{g(t[0])} [{g(t[1])}, {g(t[2])}]"
+
+
+def first_idx(mask):
+    """Index of the first True along the last axis, or -1."""
+    mask = np.asarray(mask)
+    return np.where(mask.any(-1), mask.argmax(-1), -1)

@@ -6,3 +6,4 @@ old/
 paper/
 .claude/
 results_smoke/
+results/*/seeds*/

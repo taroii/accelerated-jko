@@ -7,7 +7,8 @@ import os
 
 import numpy as np
 
-from common import COLORS, FLOOR, first_below, floor, md_table, outdir, plt, savefig
+from common import (COLORS, FLOOR, band, boot_median, ci, first_below, floor, md_table, outdir, plot_band, plt,
+                    run_seeds, savefig, stack)
 from grid import Gauss, Grid, Quartic
 from pdhg import ProxProblem, pdhg
 
@@ -52,13 +53,8 @@ def summarize(run, Jstar, h2):
     return dict(gap=gap, its=its, ratio=ratios, ratio_spec=specs, certs=cs, time=run["time"], sig=run["sig"])
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--n", type=int, default=64)
-    ap.add_argument("--n-big", type=int, default=128)
-    ap.add_argument("--iters", type=int, default=3000)
-    ap.add_argument("--ref-iters", type=int, default=20000)
-    args = ap.parse_args()
+def canonical(args):
+    """The fixed instance of the spec; fixes r_best."""
     d = outdir("e2")
     grid = Grid(args.n)
     data, lines, R = {}, [], {}
@@ -136,8 +132,6 @@ def main():
                  "values above, which stay O(1)). Since `<K2 psi, r> = <K2 psi, P r>` with `P` the orthogonal projection "
                  "onto range(K2) (one extra DCT pair), `R ||P r||_1` is an equally valid bound and it does vanish. "
                  "All stopping rules (E3, E4) use this projected certificate; both are recorded here.\n")
-    with open(os.path.join(d, "results.md"), "w") as f:
-        f.write("".join(lines))
     np.savez_compressed(os.path.join(d, "e2.npz"), r_best=r_best, **data)
 
     #  -- figure
@@ -170,6 +164,158 @@ def main():
     fig.tight_layout()
     savefig(fig, d, "fig_e2")
     print("r_best =", r_best)
+    return lines
+
+
+#  ------------------------------------------------------------------ ensemble over random instances
+CONFIGS = [("scalar", "scalar-step PDHG", dict(scalar=True, s=(None, None)))] + \
+          [(f"r{r:g}", rf"preconditioned, $\sigma_\mu/\sigma_\Lambda={r:g}$", dict(s=(1.0, r))) for r in RATIOS] + \
+          [("s0.1_1", "preconditioned (0.1, 1)", dict(s=(0.1, 1.0))), ("s10_100", "preconditioned (10, 100)", dict(s=(10.0, 100.0))),
+           ("balanced", "balanced eq. (15)", dict())]
+
+
+def random_field(g, rng, K=6, amp=0.08):
+    """Y = x + amp (grad phi + curl chi): phi, chi random cosine series with coefficients N(0,1)/|k|^3,
+    |k|_inf <= K, each scaled to unit sup norm on the grid. The curl part makes Y a non-gradient field."""
+    k = np.arange(K + 1)
+    kn = np.sqrt(k[:, None] ** 2 + k[None, :] ** 2)
+    kn[0, 0] = np.inf
+    x = g.X[:, 0, 0]
+    C, S = np.cos(np.pi * np.outer(k, x)), np.sin(np.pi * np.outer(k, x))
+
+    def potential():
+        c = rng.normal(size=(K + 1, K + 1)) / kn ** 3
+        phi = np.einsum("kl,ki,lj->ij", c, C, C)
+        dx = np.einsum("kl,ki,lj->ij", -np.pi * k[:, None] * c, S, C)
+        dy = np.einsum("kl,ki,lj->ij", -np.pi * k[None, :] * c, C, S)
+        return dx / np.abs(phi).max(), dy / np.abs(phi).max()
+
+    px, py = potential()
+    cx, cy = potential()
+    return g.X + amp * np.stack([px + cy, py - cx], -1)
+
+
+def random_gauss(rng):
+    """Centre m ~ U([0.35, 0.65]^2), variances log-uniform on [0.01, 0.06]."""
+    m = rng.uniform(0.35, 0.65, 2)
+    var = np.exp(rng.uniform(np.log(0.01), np.log(0.06), 2))
+    return Gauss(m, np.sqrt(var))
+
+
+def ens_work(job):
+    seed, a = job
+    rng = np.random.default_rng([2, seed])
+    grid = Grid(a["n"])
+    prob = ProxProblem(grid, random_gauss(rng), GAMMA, random_field(grid, rng))
+    Jstar, ref = reference(prob, a["ref_iters"])
+    z = np.zeros((grid.n, grid.n))
+    J0 = prob.values(grid.K1c(z), grid.K2c(z))[1]
+    st, psi_c = ref["state"], ref["last"]["c"]
+    bal = (np.sqrt(THETA) * np.linalg.norm(st["Lam"]) / np.linalg.norm(grid.K1c(psi_c)),
+           np.sqrt(THETA) * np.linalg.norm(st["mu"]) / np.linalg.norm(grid.K2c(psi_c)))
+    out = dict(balanced_sig=np.array(bal), ref_cert=np.array([ref["cert_spec"], ref["cert"]]), gap0=(J0 - Jstar) * prob.h2)
+    for key, _, kw in CONFIGS:
+        s = kw.get("s", bal)
+        run = pdhg(prob, s[0], s[1], a["iters"], theta=THETA, scalar=kw.get("scalar", False), record=True)
+        rel = (run["J"] - Jstar) / (J0 - Jstar)                       # gap normalised by the initial gap
+        cs = run["certs"]
+        its, ratio = [], []
+        for th in THRESH:
+            k = first_below(rel, th)
+            its.append(np.inf if k is None else k)
+            j = None if k is None else np.searchsorted(cs[:, 0], k)
+            ratio.append(np.nan if j is None or j >= len(cs) else cs[j, 2] / max((cs[j, 3] - Jstar) * prob.h2, 1e-16))
+        out[f"{key}_rel"] = rel
+        out[f"{key}_its"] = np.array(its)
+        out[f"{key}_ratio"] = np.array(ratio)
+    return seed, out
+
+
+def ensemble(args):
+    d = outdir("e2")
+    res = run_seeds(ens_work, range(args.seeds), dict(n=args.n, iters=args.iters, ref_iters=args.ref_iters), args.jobs,
+                    os.path.join(d, "seeds"), args.resume)
+    n = len(res)
+    lines = [f"\n# Ensemble over {n} random instances\n\nSeed = instance: Gaussian target with centre ~ U([0.35, 0.65]^2) and "
+             "variances log-uniform on [0.01, 0.06]; field Y = x + 0.08 (grad phi + curl chi) with random cosine-series "
+             "potentials (coefficients N(0,1)/|k|^3, |k|_inf <= 6, unit sup norm), so Y is not a gradient. All solver "
+             f"configurations run on the same instance (n = {args.n}, N = {args.iters}). Thresholds are on the gap normalised "
+             "by the initial gap J(0) - J*. Iterations: median [95% bootstrap CI of the median]; a run that never reaches the "
+             "threshold is right-censored (inf).\n\n"]
+    rows, rrows, data = [], [], {}
+    for key, lab, _ in CONFIGS:
+        its = stack(res, f"{key}_its")
+        ratio = stack(res, f"{key}_ratio")
+        data[f"{key}_its"], data[f"{key}_rel"], data[f"{key}_ratio"] = its, stack(res, f"{key}_rel"), ratio
+        row, rrow = [lab.replace("$", "")], [lab.replace("$", "")]
+        for j in (1, 3):
+            row += [ci(boot_median(its[:, j])), f"{int(np.isfinite(its[:, j]).sum())}/{n}"]
+            r = ratio[:, j][np.isfinite(ratio[:, j])]
+            rrow.append("—" if r.size == 0 else "{:.2e} [{:.1e}, {:.1e}]".format(*band(r)))
+        rows.append(row)
+        rrows.append(rrow)
+    lines.append(md_table(["configuration", "its to 1e-4", "reached", "its to 1e-8", "reached"], rows))
+    lines.append("\nProjected certificate / true gap at the first certificate evaluation after the threshold is crossed "
+                 "(median [2.5, 97.5 percentile] over instances):\n\n")
+    lines.append(md_table(["configuration", "at 1e-4", "at 1e-8"], rrows))
+    bal = stack(res, "balanced_sig")
+    rc = stack(res, "ref_cert")
+    med6 = {r: boot_median(stack(res, f"r{r:g}_its")[:, 2])[0] for r in RATIOS}
+    lines.append(f"\n- balanced ratio sig_m/sig_L of eq. (15): median {np.median(bal[:, 1] / bal[:, 0]):.3g}, "
+                 f"range [{(bal[:, 1] / bal[:, 0]).min():.3g}, {(bal[:, 1] / bal[:, 0]).max():.3g}]\n"
+                 f"- ratio with the smallest median iterations to 1e-6 over the ensemble: {min(med6, key=med6.get):g} "
+                 f"(medians: " + ", ".join(f"r={r:g}: {v:g}" for r, v in med6.items()) + ")\n"
+                 f"- converged reference runs: certificate as written in Remark 4, median {np.median(rc[:, 0]):.3e} "
+                 f"(min {rc[:, 0].min():.3e}); projected certificate, median {np.median(rc[:, 1]):.3e} (max {rc[:, 1].max():.3e})\n")
+    fig, axes = plt.subplots(1, 2, figsize=(10.5, 4))
+    k = np.arange(1, args.iters + 1)
+    for (key, lab, _), col in zip([c for c in CONFIGS if c[0] in ("scalar", "r1", "r10", "r100")], COLORS):
+        plot_band(axes[0], k, data[f"{key}_rel"], col, lab)
+    axes[0].set_xscale("log")
+    axes[0].set_yscale("log")
+    axes[0].set_ylim(FLOOR / 3, None)
+    axes[0].set_xlabel("inner iteration $k$")
+    axes[0].set_ylabel(r"$(J(\psi^k)-J^\star)/(J(0)-J^\star)$")
+    axes[0].set_title(f"normalised gap, {n} instances (median, 2.5–97.5%)")
+    axes[0].legend()
+    for i, (key, lab, _) in enumerate(CONFIGS):
+        for j, col, off in ((1, COLORS[0], -0.15), (3, COLORS[1], 0.15)):
+            m, lo, hi = boot_median(data[f"{key}_its"][:, j])
+            if np.isfinite(m):
+                hi = hi if np.isfinite(hi) else args.iters
+                axes[1].errorbar(m, i + off, xerr=[[m - lo], [hi - m]], fmt="o", ms=4, color=col, capsize=2)
+    axes[1].set_yticks(range(len(CONFIGS)))
+    axes[1].set_yticklabels([lab for _, lab, _ in CONFIGS], fontsize=7)
+    axes[1].invert_yaxis()
+    axes[1].set_xscale("log")
+    axes[1].set_xlabel("iterations (median, 95% CI; no marker = not reached)")
+    axes[1].legend(handles=[plt.Line2D([], [], marker="o", ls="", color=COLORS[0], label="to normalised gap $10^{-4}$"),
+                            plt.Line2D([], [], marker="o", ls="", color=COLORS[1], label="to normalised gap $10^{-8}$")])
+    fig.tight_layout()
+    savefig(fig, d, "fig_e2_ens")
+    np.savez_compressed(os.path.join(d, "e2_ensemble.npz"), **data)
+    return lines
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--n", type=int, default=64)
+    ap.add_argument("--n-big", type=int, default=128)
+    ap.add_argument("--iters", type=int, default=3000)
+    ap.add_argument("--ref-iters", type=int, default=20000)
+    ap.add_argument("--seeds", type=int, default=50, help="random instances (0 = canonical instance only)")
+    ap.add_argument("--jobs", type=int, default=1)
+    ap.add_argument("--resume", action="store_true", help="reuse per-seed files of an interrupted ensemble")
+    ap.add_argument("--skip-canonical", action="store_true")
+    args = ap.parse_args()
+    path = os.path.join(outdir("e2"), "results.md")
+    lines = [] if args.skip_canonical else canonical(args)
+    with open(path, "w") as f:
+        f.write("".join(lines))
+    if args.seeds > 0:
+        lines += ensemble(args)
+        with open(path, "w") as f:
+            f.write("".join(lines))
 
 
 if __name__ == "__main__":

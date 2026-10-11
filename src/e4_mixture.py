@@ -11,7 +11,8 @@ from multiprocessing import Pool
 
 import numpy as np
 
-from common import COLORS, FLOOR, RESULTS, floor, md_table, outdir, plt, savefig
+from common import (COLORS, FLOOR, RESULTS, boot_mean, ci, floor, md_table, outdir, plot_band, plt, run_seeds, savefig,
+                    stack, wilson)
 from grid import Grid, Mix2, truncated_gaussian_weights
 from pdhg import run_outer
 
@@ -49,17 +50,16 @@ def work(job):
     return key, out
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--n", type=int, default=64)
-    ap.add_argument("--T", type=int, default=80)
-    ap.add_argument("--cap", type=int, default=2000)
-    ap.add_argument("--jobs", type=int, default=1, help="runs in parallel (wall-clock columns get noisier)")
-    args = ap.parse_args()
+def load_r_best():
     path = os.path.join(RESULTS, "e2", "r_best.json")
     found = os.path.exists(path)
-    r_best = float(json.load(open(path))["r_best"]) if found else 10.0
-    a = dict(vars(args), r=r_best)
+    return (float(json.load(open(path))["r_best"]) if found else 10.0), found
+
+
+def canonical(args):
+    """The fixed configurations of the spec (2 weights x 3 references x 2 methods)."""
+    r_best, found = load_r_best()
+    a = dict(n=args.n, T=args.T, cap=args.cap, r=r_best)
     d = outdir("e4")
     jobs = [(w, init, m, a) for w in WEIGHTS for init in INITS for m in METHODS]
     if args.jobs > 1:
@@ -127,11 +127,103 @@ def main():
     savefig(fig, d, "fig_e4_evolution")
 
     lines.append("\nCollapse check: a run has collapsed to one mode if its left mass is near 0 or 1 rather than near w.\n")
-    with open(os.path.join(d, "results.md"), "w") as f:
-        f.write("".join(lines))
     np.savez_compressed(os.path.join(d, "e4.npz"), r_best=r_best, **data)
     for key in res:
         os.remove(os.path.join(d, f"run_{key}.npz"))
+    return lines
+
+
+#  ------------------------------------------------------------------ ensemble over random instances
+ENS_INITS = {"A": "uniform reference", "C": "trunc. N((0.5 + off, 0.5), 0.15^2 I), off ~ N(0, 0.02^2)"}
+RECOVER = 0.05
+
+
+def ens_work(job):
+    """One seed = one mixture (w, delta) and one asymmetric offset; both references and both methods run on it."""
+    seed, a = job
+    rng = np.random.default_rng([4, seed])
+    w, delta, off = rng.uniform(0.6, 0.95), rng.uniform(0.15, 0.25), rng.normal(0, 0.02)
+    grid = Grid(a["n"])
+    tgt = Mix2(w, (0.5 - delta, 0.5), (0.5 + delta, 0.5), 0.06)
+    out = dict(w=w, delta=delta, off=off)
+    for init in ENS_INITS:
+        wt = None if init == "A" else truncated_gaussian_weights(grid, (0.5 + off, 0.5), 0.15)
+        wts = np.ones((grid.n, grid.n)) if wt is None else wt
+        for m in METHODS:
+            r = run_outer(grid, tgt, GAMMA, a["T"], m == "accel", (1.0, a["r"]), wt=wt, eps0=EPS0, cap=a["cap"])
+            out[f"{init}_{m}_G"] = r["G"]
+            out[f"{init}_{m}_left"] = float((wts * (r["X"][..., 0] < 0.5)).sum() * grid.h ** 2)
+            out[f"{init}_{m}_inner"] = r["inner"].sum()
+            out[f"{init}_{m}_fails"] = r["fails"]
+    return seed, out
+
+
+def ensemble(args):
+    d = outdir("e4")
+    r_best, _ = load_r_best()
+    T = args.T
+    t = np.arange(T + 1)
+    res = run_seeds(ens_work, range(args.seeds), dict(n=args.n, T=T, cap=args.cap, r=r_best), args.jobs,
+                    os.path.join(d, "seeds"), args.resume)
+    n = len(res)
+    w = stack(res, "w")
+    keys = [(i, m) for i in ENS_INITS for m in METHODS]
+    Gs = np.min([stack(res, f"{i}_{m}_G").min(axis=1) for i, m in keys], axis=0)[:, None]   # best value seen per instance
+    gap = {k: np.maximum(stack(res, f"{k[0]}_{k[1]}_G") - Gs, 0.0) for k in keys}
+    rel = {k: gap[k] / gap[k][:, :1] for k in keys}
+    tt = [k for k in (20, 80) if k <= T]
+    lines = [f"\n# Ensemble over {n} random instances\n\nSeed = instance: mixture weight w ~ U(0.6, 0.95), modes at "
+             f"(0.5 -+ delta, 0.5) with delta ~ U(0.15, 0.25), s = 0.06; references: {'; '.join(f'{k} = {v}' for k, v in ENS_INITS.items())}. "
+             f"Both methods and both references run on the same instance; G* = best value seen across the four runs of that "
+             f"instance. Mode recovery = mass in the left half-plane at t = {T} within +-{RECOVER} of w (Wilson 95% interval). "
+             f"Gap columns: normalised gap (G(x_t) - G*)/(G(x_0) - G*), mean [95% bootstrap CI of the mean].\n\n"]
+    rows = []
+    for i, m in keys:
+        left = stack(res, f"{i}_{m}_left")
+        k = int((np.abs(left - w) <= RECOVER).sum())
+        lo, hi = wilson(k, n)
+        rows.append([i, METHODS[m], f"{k}/{n} [{lo:.2f}, {hi:.2f}]", ci(boot_mean(np.abs(left - w)))] +
+                    [ci(boot_mean(rel[(i, m)][:, kk])) for kk in tt] + [int(stack(res, f"{i}_{m}_fails").sum())])
+    lines.append(md_table(["reference", "method", "mode recovery rate", "abs(left mass - w)"] +
+                          [f"normalised gap at t={kk}" for kk in tt] + ["steps w/o admissible iterate"], rows))
+    lines.append("\nPaired log10(gap accelerated / gap non-accelerated), gaps floored at 1e-13 (negative = acceleration helps):\n\n")
+    lg = {k: np.log10(np.maximum(gap[k], 1e-13)) for k in keys}
+    lines.append(md_table(["reference"] + [f"t={kk}" for kk in tt],
+                          [[i] + [ci(boot_mean((lg[(i, "accel")] - lg[(i, "mm")])[:, kk])) for kk in tt] for i in ENS_INITS]))
+    fig, axes = plt.subplots(1, len(ENS_INITS), figsize=(10, 4), squeeze=False)
+    for ax, i in zip(axes[0], ENS_INITS):
+        for (m, mlab), col in zip(METHODS.items(), COLORS):
+            plot_band(ax, t[1:], rel[(i, m)][:, 1:], col, mlab, lo_floor=1e-13)
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_xlabel("outer step $t$")
+        ax.set_ylabel(r"$(G(x_t)-G^\star)/(G(x_0)-G^\star)$")
+        ax.set_title(f"reference {i}, {n} instances (median, 2.5–97.5%)")
+    axes[0, 0].legend()
+    fig.tight_layout()
+    savefig(fig, d, "fig_e4_ens")
+    np.savez_compressed(os.path.join(d, "e4_ensemble.npz"), r_best=r_best, **{k: stack(res, k) for k in res[0]})
+    return lines
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--n", type=int, default=64)
+    ap.add_argument("--T", type=int, default=80)
+    ap.add_argument("--cap", type=int, default=2000)
+    ap.add_argument("--seeds", type=int, default=20, help="random instances (0 = canonical configurations only)")
+    ap.add_argument("--jobs", type=int, default=1, help="parallel processes (wall-clock columns get noisier)")
+    ap.add_argument("--resume", action="store_true", help="reuse per-seed files of an interrupted ensemble")
+    ap.add_argument("--skip-canonical", action="store_true")
+    args = ap.parse_args()
+    path = os.path.join(outdir("e4"), "results.md")
+    lines = [] if args.skip_canonical else canonical(args)
+    with open(path, "w") as f:
+        f.write("".join(lines))
+    if args.seeds > 0:
+        lines += ensemble(args)
+        with open(path, "w") as f:
+            f.write("".join(lines))
 
 
 if __name__ == "__main__":

@@ -3,8 +3,8 @@
 Code for the experiments of Section 6 (E1–E4). The specification the code implements is
 `handoff/experiments/EXPERIMENTS.md`; the write-up is `handoff/paper/`.
 
-Everything is CPU, float64, deterministic (no random numbers enter any experiment), and needs
-only numpy, scipy and matplotlib.
+Everything is CPU, float64, reproducible from fixed seeds, and needs only numpy, scipy and
+matplotlib.
 
 ## Install
 
@@ -15,20 +15,54 @@ pip install -r requirements.txt          # numpy scipy matplotlib
 ## Reproduce
 
 ```
-./scripts/run_all.sh                 # unit tests, then E2 -> E1 -> E3 -> E4, full spec, into results/
-QUICK=1 ./scripts/run_all.sh         # smoke test (small grids, few steps) into results_smoke/, about a minute
-JOBS=12 ./scripts/run_all.sh         # E3 targets / E4 configurations in parallel processes
+./scripts/run_all.sh                 # unit tests, then E2 -> E1 -> E3 -> E4 into results/, one process per core
+QUICK=1 ./scripts/run_all.sh         # smoke test (small grids, few steps, 3 seeds) into results_smoke/, about a minute
+JOBS=4 ./scripts/run_all.sh          # number of parallel processes (default: all cores)
 EXPS="e2 e3" ./scripts/run_all.sh    # only the named experiments
+RESUME=1 ./scripts/run_all.sh        # continue interrupted ensembles from their per-seed files
+SEEDS=0 ./scripts/run_all.sh         # fixed spec instances only (or any seed count for all four)
 PYTHON=/path/to/python ./scripts/run_all.sh
 ```
 
 The unit tests run first and the script aborts if any fails. E2 must run before E3/E4: it
 writes the channel ratio `results/e2/r_best.json` that they read (they fall back to 10 and say
 so if the file is missing). Each script also runs on its own with no arguments
-(`python src/e3_end_to_end.py`); the defaults are the spec.
+(`python src/e3_end_to_end.py`); the defaults are the spec, single process.
 
-Rough single-core cost: unit tests 10 s, E1 1 min, E2 4 min, E3 minutes to an hour, E4 the
-slowest (12 runs x 80 outer steps x up to 2000 inner iterations) — use `JOBS`.
+Each experiment has two parts, both written to the same `results.md`:
+
+1. the **canonical** fixed instance of the spec (`<exp>.npz`, `fig_<exp>.*`);
+2. an **ensemble** over random problem instances (`<exp>_ensemble.npz`, `fig_<exp>_ens.*`).
+
+Rough cost in CPU-hours (divide by the core count): E1 about 1.5, E2 about 0.5, E3 about 1–3,
+E4 about 16 (4 ms per inner iteration, and nearly every step runs to the 2000-iteration cap).
+
+## Statistics
+
+The algorithms are deterministic; the randomness is over **problem instances**. A seed fixes
+the reference, the target and (in E2) the field Y, and every method runs on that same instance,
+so comparisons are paired. Seed `s` of experiment `k` uses `numpy.random.default_rng([k, s])`.
+
+| exp | seeds | what a seed draws |
+|---|---|---|
+| E1 | 100 (+50 per lambda in the sweep) | `Zc = R(th) diag(e^a1, e^a2) R(th)^T`, `th ~ U(0, pi)`, `a_i ~ U(0, log 10)`; `Q = R(th') diag(1/lam_i) R(th')^T`, `lam_i` log-uniform on [0.02, 0.2] (weak) or [0.5, 5] (strong) |
+| E2 | 50 | Gaussian target, centre `~ U([0.35, 0.65]^2)`, variances log-uniform on [0.01, 0.06]; `Y = x + 0.08 (grad phi + curl chi)`, random cosine-series potentials with coefficients `N(0,1)/|k|^3` (`|k|_inf <= 6`, unit sup norm) |
+| E3 | 20 | Gaussian target as in E2 (uniform reference, `X_0 = Id`) |
+| E4 | 20 | `w ~ U(0.6, 0.95)`, modes at `(0.5 -+ delta, 0.5)` with `delta ~ U(0.15, 0.25)`, offset of the asymmetric reference `~ N(0, 0.02^2)`; references A (uniform) and C (offset Gaussian) |
+
+Reported quantities are scale-free: in E1 the bound utilisation
+`u_t = gap_t gamma (t+1)^2 / (2 W_{2,nu}^2(x_0, rho*))` (Theorem 1: `u_t <= 1` on every
+instance); in E2–E4 the gap divided by the initial gap, iterations to a tolerance, and paired
+log-ratios accelerated / non-accelerated at fixed `t`. Curves are the median with a 2.5–97.5
+percentile band; tables give the mean with a 95% bootstrap CI of the mean (2000 resamples), and
+for iteration counts the median with a bootstrap CI of the median, with runs that never reach
+the tolerance right-censored and the fraction reached stated. E4 reports the mode recovery rate
+(left-half-plane mass within 0.05 of `w`) with a Wilson 95% interval.
+
+Choices the design left open: the E2/E3 ensembles use the Gaussian target only (the quartic
+stays in the canonical runs); `r_best` still comes from the canonical E2 instance (the ensemble's
+own best ratio is reported next to it); the E2 n=128 run and the E4 evolution figure are
+canonical only. Per-seed raw output is kept in `results/<exp>/seeds*/` (git-ignored) for `RESUME`.
 
 ## Layout
 
@@ -53,8 +87,8 @@ handoff/    the specification, the paper source, and the earlier prototypes
 
 ## Status of `results/`
 
-`results/e1` and `results/e2` are full spec runs. E3 and E4 have only been smoke-tested
-(`QUICK=1`); their full runs are still to be done.
+`results/e1` and `results/e2` hold full runs of the canonical instances only. The ensembles and
+all of E3/E4 have only been smoke-tested (`QUICK=1`); their full runs are still to be done.
 
 ## Deviations from the spec
 
@@ -79,6 +113,8 @@ handoff/    the specification, the paper source, and the earlier prototypes
 8. **E4.** The mixture conjugate `h2*` is a best-of-two-starts local maximisation, so the
    certificate is only a heuristic stopping rule there. The gap figure has one panel per mixture
    weight instead of a single 12-curve panel.
-9. **`--jobs`** (off by default) runs independent configurations in separate processes.
+9. **`--jobs`** runs independent configurations and seeds in separate processes (default 1 in the
+   scripts, all cores in `run_all.sh`); wall-clock columns are then noisier.
+10. **Ensembles** over random instances are an addition to the spec (see Statistics).
 
 Released under the MIT License (see `LICENSE`).

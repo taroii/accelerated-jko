@@ -234,6 +234,11 @@ class Quartic(_Separable):
         return 3 * self.c * (U - self.m) ** 2
 
 
+def _sq(a):
+    """|a|^2 over the last (length-2) axis; much faster than .sum(-1) on small axes."""
+    return a[..., 0] * a[..., 0] + a[..., 1] * a[..., 1]
+
+
 class Mix2:
     """MIX2(w, m1, m2, s): q ∝ w N(m1, s^2 I) + (1-w) N(m2, s^2 I) on the box, V = -log q.
     Non-convex: the pointwise transport subproblem is a 2-D projected Newton from a warm start
@@ -254,8 +259,8 @@ class Mix2:
         self.name = f"mix2_w{w}"
 
     def _logparts(self, U):
-        e1 = self.logw[0] - ((U - self.m1) ** 2).sum(-1) / (2 * self.s2)
-        e2 = self.logw[1] - ((U - self.m2) ** 2).sum(-1) / (2 * self.s2)
+        e1 = self.logw[0] - _sq(U - self.m1) / (2 * self.s2)
+        e2 = self.logw[1] - _sq(U - self.m2) / (2 * self.s2)
         return e1, e2
 
     def V(self, U):
@@ -281,8 +286,9 @@ class Mix2:
         `steps` projected Newton steps with backtracking from u0."""
         A = np.asarray(A, float)                      # scalar or (n,n,1)
         A0 = A[..., 0] if A.ndim else A
-        F = lambda u: A0 * (self.V(u) + ((u - Y) ** 2).sum(-1) / (2 * gamma)) \
-            + Bq * ((u - a) ** 2).sum(-1) / 2 - (L * u).sum(-1)
+        lin = np.ndim(L) > 0
+        F = lambda u: A0 * (self.V(u) + _sq(u - Y) / (2 * gamma)) + (Bq * _sq(u - a) / 2 if Bq else 0.0) \
+            - ((L[..., 0] * u[..., 0] + L[..., 1] * u[..., 1]) if lin else 0.0)
         u = np.clip(Y if u0 is None else u0, 0.0, 1.0)
         for _ in range(steps):
             g = A * (self.grad(u) + (u - Y) / gamma) + Bq * (u - a) - L
@@ -308,9 +314,10 @@ class Mix2:
             best = u
             done = np.zeros(f0.shape, bool)
             al = 1.0
-            for _bt in range(12):
+            slack = 1e-14 * (1.0 + np.abs(f0))            # cells already at a stationary point pass at once
+            for _bt in range(8):
                 cand = np.clip(u + al * d, 0.0, 1.0)
-                ok = (F(cand) <= f0) & ~done
+                ok = (F(cand) <= f0 + slack) & ~done
                 best = np.where(ok[..., None], cand, best)
                 done |= ok
                 if done.all():
@@ -323,8 +330,8 @@ class Mix2:
         val = None
         for mk in (self.m1, self.m2):
             z0 = np.clip((mk / self.s2 + Y / gamma + ut) / (1 / self.s2 + 1 / gamma), 0.0, 1.0)
-            z = self.solve(1.0, 0.0, 0.0, ut, Y, gamma, u0=z0, steps=25)
-            v = ((z - X) * ut).sum(-1) - self.V(z) - ((z - Y) ** 2).sum(-1) / (2 * gamma)
+            z = self.solve(1.0, 0.0, 0.0, ut, Y, gamma, u0=z0, steps=12)
+            v = ((z - X) * ut).sum(-1) - self.V(z) - _sq(z - Y) / (2 * gamma)
             val = v if val is None else np.maximum(val, v)
         return val
 
