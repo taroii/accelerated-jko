@@ -92,7 +92,7 @@ def canonical(args):
         its = [R[t.name][f"precond r={r:g}"]["its"][2] for t in targets()]
         return np.inf if any(i is None for i in its) else sum(its)
     r_best = min(RATIOS, key=score)
-    with open(os.path.join(d, "r_best.json"), "w") as f:
+    with open(os.path.join(d, "r_best.json"), "w", encoding="utf-8") as f:
         json.dump({"r_best": r_best, "sig_L": 1.0, "sig_m": r_best}, f)
 
     # n-scaling run with the best ratio
@@ -313,11 +313,11 @@ def main():
     args = ap.parse_args()
     path = os.path.join(outdir("e2"), "results.md")
     lines = [] if args.skip_canonical else canonical(args)
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write("".join(lines))
     if args.seeds > 0:
         lines += ensemble(args)
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write("".join(lines))
 
 

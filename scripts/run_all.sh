@@ -37,11 +37,18 @@ tail -1 "$OUT/unit_tests.txt"
 for e in $EXPS; do
   stamp "$e  (jobs: $JOBS, experiments queued: $EXPS)"
   case "$e" in
-    e1) $PY src/e1_gaussian_rates.py $A_e1 $COMMON ;;
-    e2) $PY src/e2_inner_solver.py   $A_e2 $COMMON ;;
-    e3) $PY src/e3_end_to_end.py     $A_e3 $COMMON ;;
-    e4) $PY src/e4_mixture.py        $A_e4 $COMMON ;;
+    e1) f=e1_gaussian_rates.py; A="$A_e1" ;;
+    e2) f=e2_inner_solver.py;   A="$A_e2" ;;
+    e3) f=e3_end_to_end.py;     A="$A_e3" ;;
+    e4) f=e4_mixture.py;        A="$A_e4" ;;
     *)  echo "unknown experiment: $e" >&2; exit 1 ;;
   esac
+  rc=0
+  $PY "src/$f" $A $COMMON || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo "!!! [$(date +%H:%M:%S)] $e FAILED with exit code $rc — stopping. Rerun with: RESUME=1 EXPS=\"...\" $0" >&2
+    exit "$rc"
+  fi
+  echo "--- [$(date +%H:%M:%S)] $e finished"
 done
 stamp "all done -> $OUT/"

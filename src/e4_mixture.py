@@ -220,11 +220,11 @@ def main():
     args = ap.parse_args()
     path = os.path.join(outdir("e4"), "results.md")
     lines = [] if args.skip_canonical else canonical(args)
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write("".join(lines))
     if args.seeds > 0:
         lines += ensemble(args)
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write("".join(lines))
 
 
