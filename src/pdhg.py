@@ -87,11 +87,12 @@ def new_state(grid):
 
 
 def pdhg(prob, sig_L, sig_m, max_iter, theta=0.99, scalar=False, state=None, tol=None,
-         cert_every=25, cert_kind="proj", record=False):
+         cert_every=25, cert_kind="proj", record=False, stall=None):
     """Run Algorithm 2 for at most `max_iter` iterations from `state` (warm start; zeros if None).
 
     scalar=True is the Chambolle–Pock baseline T = tau I with tau = sigma = sqrt(theta)/||K||.
-    Stops early when the certificate (checked every `cert_every` iterations) is <= tol.
+    Stops early when the certificate (checked every `cert_every` iterations) is <= tol, or, with
+    `stall` set, when the coefficients moved by less than `stall` (relative) since the last check.
     Returns the last admissible iterate: its coefficients `c`, fields `H`, `g`, values `J`, `G`.
     With record=True also the per-iteration J (inf where inadmissible) and all certificates."""
     grid, tgt, wt = prob.grid, prob.target, prob.wt
@@ -112,6 +113,8 @@ def pdhg(prob, sig_L, sig_m, max_iter, theta=0.99, scalar=False, state=None, tol
     Jhist = np.full(max_iter, np.inf) if record else None
     certs = []
     cert = (np.inf, np.inf)
+    stalled = False
+    c_chk = c
     t0 = time.perf_counter()
     k = 0
     for k in range(1, max_iter + 1):
@@ -138,8 +141,13 @@ def pdhg(prob, sig_L, sig_m, max_iter, theta=0.99, scalar=False, state=None, tol
                 certs.append((k, cert[0], cert[1], last["J"]))
             if tol is not None and cert[cert_kind == "proj"] <= tol:
                 break
+        if stall is not None and cert_every and k % cert_every == 0:
+            stalled = last is not None and np.abs(c - c_chk).max() <= stall * np.abs(c).max()
+            c_chk = c
+            if stalled:
+                break
     out = dict(state=dict(c=c, Lam=Lam, mu=mu, u=u), last=last, iters=k,
-               cert_spec=cert[0], cert=cert[1], time=time.perf_counter() - t0,
+               cert_spec=cert[0], cert=cert[1], stalled=bool(stalled), time=time.perf_counter() - t0,
                sig=(float(sig_L), float(sig_m)))
     if record:
         out["J"] = Jhist[:k]
@@ -148,17 +156,18 @@ def pdhg(prob, sig_L, sig_m, max_iter, theta=0.99, scalar=False, state=None, tol
 
 
 def run_outer(grid, target, gamma, T, accel, sig, wt=None, eps0=None, cap=5000, fixed=None,
-              tol_const=None, snapshots=(), log=None):
+              tol_const=None, snapshots=(), log=None, stall=None):
     """Algorithm 1 on the grid with X_0 = Z_0 = Id; alpha_t = 2/(t+2) (accel) or 1 (minimizing movement).
 
     Inner accuracy: `fixed` iterations per step, or the certified schedule eps_t = eps0 (t+1)^-4.5
-    (or the constant `tol_const`), capped at `cap` inner iterations. Duals and psi are warm-started."""
+    (or the constant `tol_const`), capped at `cap` inner iterations. Duals and psi are warm-started.
+    `stall` also ends an inner solve once its iterate has stopped moving (see `pdhg`)."""
     X = grid.X.copy()
     Z = grid.X.copy()
     state = new_state(grid)
     p0 = ProxProblem(grid, target, gamma, X, wt)
     G = [p0.values(grid.K1c(state["c"]), grid.K2c(state["c"]))[2]]
-    inner, wall, hit, cert, fails = [], [], [], [], 0
+    inner, wall, hit, cert, stalled, fails = [], [], [], [], [], 0
     snaps = {}
     H = np.zeros((grid.n, grid.n, 3))
     if 0 in snapshots:
@@ -173,7 +182,7 @@ def run_outer(grid, target, gamma, T, accel, sig, wt=None, eps0=None, cap=5000, 
             tol = None
         else:
             tol = tol_const if tol_const is not None else eps0 * (t + 1) ** -4.5
-            res = pdhg(prob, sig[0], sig[1], cap, state=state, tol=tol)
+            res = pdhg(prob, sig[0], sig[1], cap, state=state, tol=tol, stall=stall)
         state = res["state"]
         if res["last"] is None:          # no admissible iterate in this solve: keep the previous map
             fails += 1
@@ -185,11 +194,12 @@ def run_outer(grid, target, gamma, T, accel, sig, wt=None, eps0=None, cap=5000, 
         G.append(Gt)
         inner.append(res["iters"])
         cert.append(res["cert"])
-        hit.append(tol is not None and not res["cert"] <= tol)
+        stalled.append(res["stalled"])
+        hit.append(tol is not None and not res["cert"] <= tol and not res["stalled"])
         wall.append(time.perf_counter() - t0)
         if t + 1 in snapshots:
             snaps[t + 1] = (X.copy(), prob.wt / hess_parts(H)[3])
         if log:
             log(t + 1, Gt, res["iters"], res["cert"])
     return dict(G=np.array(G), inner=np.array(inner), wall=np.array(wall), cap_hit=np.array(hit),
-                cert=np.array(cert), X=X, Z=Z, c=state["c"], fails=fails, snaps=snaps)
+                cert=np.array(cert), stalled=np.array(stalled), X=X, Z=Z, c=state["c"], fails=fails, snaps=snaps)

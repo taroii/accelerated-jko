@@ -17,6 +17,7 @@ from pdhg import run_outer
 
 GAMMA = 0.05
 EPS0 = 1e-2
+STALL = 1e-10    # an inner solve also ends once its coefficients move less than this (relative) in 25 iterations
 SNAP = (0, 5, 10, 20, 40, 80)
 WEIGHTS = (0.5, 0.9)
 INITS = {"A": "uniform", "B": "trunc. N((0.5,0.5), 0.15^2 I)", "C": "trunc. N((0.52,0.5), 0.15^2 I)"}
@@ -36,16 +37,17 @@ def work(job):
     wt = reference_weights(grid, init)
     snaps = tuple(s for s in SNAP if s <= a["T"])
     r = run_outer(grid, tgt, GAMMA, a["T"], method == "accel", (1.0, a["r"]), wt=wt, eps0=EPS0, cap=a["cap"],
-                  snapshots=snaps)
+                  snapshots=snaps, stall=STALL)
     wts = np.ones((grid.n, grid.n)) if wt is None else wt
     left = float((wts * (r["X"][..., 0] < 0.5)).sum() * grid.h ** 2)
-    out = dict(G=r["G"], inner=r["inner"], wall=r["wall"], cap_hit=r["cap_hit"], cert=r["cert"], fails=r["fails"],
+    out = dict(G=r["G"], inner=r["inner"], wall=r["wall"], cap_hit=r["cap_hit"], stalled=r["stalled"], cert=r["cert"],
+               fails=r["fails"],
                left=left, snap_t=np.array(snaps), snap_X=np.stack([r["snaps"][s][0] for s in snaps]),
                snap_rho=np.stack([r["snaps"][s][1] for s in snaps]))
     key = f"w{w}_{init}_{method}"
     np.savez_compressed(os.path.join(outdir("e4"), f"run_{key}.npz"), **out)
     say(f"E4 canonical [{key}] G_T = {r['G'][-1]:.6f}, left mass {left:.3f} (target {w}), inner its {r['inner'].sum()}, "
-          f"cap hits {int(r['cap_hit'].sum())}, fails {r['fails']}, {r['wall'][-1]:.0f}s")
+          f"cap hits {int(r['cap_hit'].sum())}, stalled {int(r['stalled'].sum())}, fails {r['fails']}, {r['wall'][-1]:.0f}s")
     return key, out
 
 
@@ -73,7 +75,8 @@ def canonical(args):
     lines = [f"# E4 — beyond the theory (two-component mixture)\n\nn = {args.n}, gamma = {GAMMA}, T = {T}, target "
              f"MIX2(w, (0.3,0.5), (0.7,0.5), s = 0.06), inner solver (sig_L, sig_m) = (1, {r_best:g})"
              + ("" if found else " [r_best.json missing: default 10]") +
-             f", schedule eps_t = {EPS0:g} (t+1)^-4.5, cap {args.cap}.\n\n"
+             f", schedule eps_t = {EPS0:g} (t+1)^-4.5, cap {args.cap}; an inner solve also ends ('stalled') once its "
+             f"coefficients move by less than {STALL:g} (relative) over 25 iterations.\n\n"
              "**Outside the theory.** G is not convex along generalized geodesics, the inner problem is non-convex "
              "(the pointwise transport solve is a warm-started local Newton solve, and the 'certificate' uses a "
              "local maximisation for h2*, so it is not a valid bound). No scheme has a guarantee here. "
@@ -91,7 +94,7 @@ def canonical(args):
                 gap = o["G"] - Gs
                 ax.loglog(t[1:], floor(gap[1:]), styles[init], color=col, label=f"{mlab}, init {init}")
                 rows.append([f"{init} ({INITS[init]})", mlab] + [float(gap[k]) for k in tt] +
-                            [f"{o['left']:.3f}", int(o["inner"].sum()), int(o["cap_hit"].sum()), int(o["fails"])])
+                            [f"{o['left']:.3f}", int(o["inner"].sum()), int(o["cap_hit"].sum()), int(o["stalled"].sum()), int(o["fails"])])
                 for k, v in o.items():
                     data[f"w{w}_{init}_{m}_{k}"] = v
         ax.set_xlabel("outer step $t$")
@@ -100,7 +103,7 @@ def canonical(args):
         ax.set_ylim(FLOOR / 3, None)
         lines.append(f"\n## w = {w}\n\nG* (best value seen) = {Gs:.8f}. Target mass in the left half-plane: {w}.\n\n")
         lines.append(md_table(["reference / init", "method"] + [f"gap at t={k}" for k in tt] +
-                              [f"left mass at t={T}", "inner its", "steps at cap", "steps w/o admissible iterate"], rows))
+                              [f"left mass at t={T}", "inner its", "steps at cap", "steps stalled", "steps w/o admissible iterate"], rows))
         data[f"w{w}_Gstar"] = Gs
     axes[0, 0].legend(ncol=2)
     fig.tight_layout()
@@ -150,12 +153,13 @@ def ens_work(job):
         wt = None if init == "A" else truncated_gaussian_weights(grid, (0.5 + off, 0.5), 0.15)
         wts = np.ones((grid.n, grid.n)) if wt is None else wt
         for m in METHODS:
-            r = run_outer(grid, tgt, GAMMA, a["T"], m == "accel", (1.0, a["r"]), wt=wt, eps0=EPS0, cap=a["cap"])
+            r = run_outer(grid, tgt, GAMMA, a["T"], m == "accel", (1.0, a["r"]), wt=wt, eps0=EPS0, cap=a["cap"], stall=STALL)
             out[f"{init}_{m}_G"] = r["G"]
             out[f"{init}_{m}_left"] = float((wts * (r["X"][..., 0] < 0.5)).sum() * grid.h ** 2)
             out[f"{init}_{m}_inner"] = r["inner"].sum()
             out[f"{init}_{m}_fails"] = r["fails"]
-            say(f"E4 seed {seed} [{init}, {m}]: G_T = {r['G'][-1]:.5f}, left mass {out[f'{init}_{m}_left']:.3f} (w = {w:.3f})")
+            say(f"E4 seed {seed} [{init}, {m}]: G_T = {r['G'][-1]:.5f}, left mass {out[f'{init}_{m}_left']:.3f} (w = {w:.3f}), "
+                f"inner its {r['inner'].sum()}")
     return seed, out
 
 

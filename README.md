@@ -112,7 +112,9 @@ all of E3/E4 have only been smoke-tested (`QUICK=1`); their full runs are still 
 7. **`r_best`** is the argmin of iterations-to-1e-6 summed over the two E2 targets.
 8. **E4.** The mixture conjugate `h2*` is a best-of-two-starts local maximisation, so the
    certificate is only a heuristic stopping rule there. The gap figure has one panel per mixture
-   weight instead of a single 12-curve panel.
+   weight instead of a single 12-curve panel. The certificate never reaches the tolerance there, so an inner
+   solve also ends once its coefficients move by less than 1e-10 (relative) over 25 iterations
+   (reported as 'steps stalled'); this only removes iterations that no longer change the iterate.
 9. **`--jobs`** runs independent configurations and seeds in separate processes (default 1 in the
    scripts, half the cores in `run_all.sh`); wall-clock columns are then noisier.
 10. **Ensembles** over random instances are an addition to the spec (see Statistics).
