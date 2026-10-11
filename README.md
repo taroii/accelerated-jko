@@ -15,9 +15,9 @@ pip install -r requirements.txt          # numpy scipy matplotlib
 ## Reproduce
 
 ```
-./scripts/run_all.sh                 # unit tests, then E2 -> E1 -> E3 -> E4 into results/, one process per core
+./scripts/run_all.sh                 # unit tests, then E2 -> E1 -> E3 -> E4 into results/, on half the cores at low priority
 QUICK=1 ./scripts/run_all.sh         # smoke test (small grids, few steps, 3 seeds) into results_smoke/, about a minute
-JOBS=4 ./scripts/run_all.sh          # number of parallel processes (default: all cores)
+JOBS=4 ./scripts/run_all.sh          # number of parallel processes (default: half the cores)
 EXPS="e2 e3" ./scripts/run_all.sh    # only the named experiments
 RESUME=1 ./scripts/run_all.sh        # continue interrupted ensembles from their per-seed files
 SEEDS=0 ./scripts/run_all.sh         # fixed spec instances only (or any seed count for all four)
@@ -114,7 +114,7 @@ all of E3/E4 have only been smoke-tested (`QUICK=1`); their full runs are still 
    certificate is only a heuristic stopping rule there. The gap figure has one panel per mixture
    weight instead of a single 12-curve panel.
 9. **`--jobs`** runs independent configurations and seeds in separate processes (default 1 in the
-   scripts, all cores in `run_all.sh`); wall-clock columns are then noisier.
+   scripts, half the cores in `run_all.sh`); wall-clock columns are then noisier.
 10. **Ensembles** over random instances are an addition to the spec (see Statistics).
 
 Released under the MIT License (see `LICENSE`).

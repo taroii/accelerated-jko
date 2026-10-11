@@ -2,16 +2,17 @@
 # Unit tests, then E2 -> E1 -> E3 -> E4 (the order of the spec; E2 fixes the channel ratio used by E3/E4).
 # Each experiment runs the fixed instance of the spec and then an ensemble over random instances
 # (seed = instance; 100 / 50 / 20 / 20 seeds for E1 / E2 / E3 / E4).
-#   ./scripts/run_all.sh                 full runs into results/, one process per CPU core
+#   ./scripts/run_all.sh                 full runs into results/, on half the CPU cores at low priority
 #   QUICK=1 ./scripts/run_all.sh         smoke test (small grids, few steps, 3 seeds) into results_smoke/
-#   JOBS=4 ./scripts/run_all.sh          number of parallel processes (default: all cores)
+#   JOBS=4 ./scripts/run_all.sh          number of parallel processes (default: half the cores)
 #   EXPS="e2 e3" ./scripts/run_all.sh    only the named experiments
 #   RESUME=1 ./scripts/run_all.sh        continue interrupted ensembles from their per-seed files
 #   SEEDS=0 ./scripts/run_all.sh         fixed instances only (or any seed count for all four)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 PY="${PYTHON:-python}"
-JOBS="${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)}"
+NCPU="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo "${NUMBER_OF_PROCESSORS:-2}")"
+JOBS="${JOBS:-$(( NCPU / 2 > 0 ? NCPU / 2 : 1 ))}"     # half the cores by default; workers run at low priority
 COMMON="--jobs $JOBS"
 [ "${RESUME:-0}" = "1" ] && COMMON="$COMMON --resume"
 EXPS="${EXPS:-e2 e1 e3 e4}"

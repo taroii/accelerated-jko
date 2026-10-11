@@ -7,11 +7,10 @@ is local (warm-started Newton), and the duality certificate is only a heuristic 
 import argparse
 import json
 import os
-from multiprocessing import Pool
 
 import numpy as np
 
-from common import (COLORS, FLOOR, RESULTS, boot_mean, ci, floor, md_table, outdir, plot_band, plt, run_seeds, savefig,
+from common import (COLORS, FLOOR, RESULTS, boot_mean, ci, floor, md_table, outdir, plot_band, plt, pool, run_seeds, savefig,
                     say, stack, wilson)
 from grid import Grid, Mix2, truncated_gaussian_weights
 from pdhg import run_outer
@@ -64,8 +63,8 @@ def canonical(args):
     jobs = [(w, init, m, a) for w in WEIGHTS for init in INITS for m in METHODS]
     say(f"E4 canonical: {len(jobs)} runs x {args.T} outer steps (cap {args.cap} inner iterations each)")
     if args.jobs > 1:
-        with Pool(min(args.jobs, len(jobs))) as pool:
-            res = dict(pool.map(work, jobs))
+        with pool(min(args.jobs, len(jobs))) as pl:
+            res = dict(pl.map(work, jobs))
     else:
         res = dict(work(j) for j in jobs)
 

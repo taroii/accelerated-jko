@@ -4,12 +4,11 @@ Writes results/e3/{e3.npz, fig_e3.*, results.md}. No arguments needed (run E2 fi
 import argparse
 import json
 import os
-from multiprocessing import Pool
 
 import numpy as np
 
 from common import (COLORS, FLOOR, RESULTS, add_references, band, boot_mean, boot_median, ci, first_idx, floor,
-                    md_table, outdir, plot_band, plt, run_seeds, savefig, say, stack, theorem_bound)
+                    md_table, outdir, plot_band, plt, pool, run_seeds, savefig, say, stack, theorem_bound)
 from e2_inner_solver import random_gauss
 from grid import Gauss, Grid, Quartic
 from pdhg import run_outer
@@ -75,8 +74,8 @@ def canonical(args):
     names = ["gauss", "quartic"]
     jobs = [(nm, a) for nm in names]
     if args.jobs > 1:
-        with Pool(min(args.jobs, len(jobs))) as pool:
-            res = dict(pool.map(work, jobs))
+        with pool(min(args.jobs, len(jobs))) as pl:
+            res = dict(pl.map(work, jobs))
     else:
         res = dict(work(j) for j in jobs)
 

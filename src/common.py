@@ -4,6 +4,10 @@ import os
 import time
 from multiprocessing import Pool
 
+# one numerical thread per process: worker processes inherit this, so N jobs use N cores, not N x cores
+for _v in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+    os.environ.setdefault(_v, "1")
+
 import numpy as np
 import matplotlib as mpl
 
@@ -27,6 +31,22 @@ def say(msg):
 def _hms(sec):
     sec = int(sec)
     return f"{sec // 3600}h{sec % 3600 // 60:02d}m" if sec >= 3600 else f"{sec // 60}m{sec % 60:02d}s"
+
+
+def gentle():
+    """Pool initializer: run the worker at below-normal priority so the machine stays responsive."""
+    try:
+        os.nice(10)
+    except AttributeError:                                   # Windows
+        import ctypes
+        k32 = ctypes.windll.kernel32
+        k32.SetPriorityClass(k32.GetCurrentProcess(), 0x4000)   # BELOW_NORMAL_PRIORITY_CLASS
+    except OSError:
+        pass
+
+
+def pool(jobs):
+    return Pool(jobs, initializer=gentle)
 
 
 def outdir(name):
@@ -111,8 +131,8 @@ def run_seeds(work, seeds, cfg, jobs, cache, resume=False):
             + (f", about {_hms(el / n_done[0] * left)} left" if left else ""))
 
     if jobs > 1 and len(todo) > 1:
-        with Pool(min(jobs, len(todo))) as pool:
-            for s, out in pool.imap_unordered(work, todo):
+        with pool(min(jobs, len(todo))) as pl:
+            for s, out in pl.imap_unordered(work, todo):
                 done(s, out)
     else:
         for job in todo:
