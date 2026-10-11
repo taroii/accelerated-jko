@@ -9,7 +9,7 @@ from multiprocessing import Pool
 import numpy as np
 
 from common import (COLORS, FLOOR, RESULTS, add_references, band, boot_mean, boot_median, ci, first_idx, floor,
-                    md_table, outdir, plot_band, plt, run_seeds, savefig, stack, theorem_bound)
+                    md_table, outdir, plot_band, plt, run_seeds, savefig, say, stack, theorem_bound)
 from e2_inner_solver import random_gauss
 from grid import Gauss, Grid, Quartic
 from pdhg import run_outer
@@ -39,6 +39,7 @@ def run_instance(tgt, a, name):
     grid = Grid(a["n"])
     sig = (1.0, a["r"])
     out = {}
+    say(f"E3 [{name}]: reference run, {a['ref_steps']} minimizing-movement steps")
     # reference: fixed-reference minimizing movement at a constant certificate
     ref = run_outer(grid, tgt, GAMMA, a["ref_steps"], False, sig, tol_const=a["ref_tol"], cap=a["ref_cap"])
     out["ref_G"] = ref["G"]
@@ -46,15 +47,15 @@ def run_instance(tgt, a, name):
     out["ref_cap_hit"] = ref["cap_hit"]
     out["Gstar"] = ref["G"].min()
     out["w2nu0"] = float(((ref["X"] - grid.X) ** 2).sum() * grid.h ** 2)
-    print(f"[{name}] reference: G* = {out['Gstar']:.12f}, W2nu0 = {out['w2nu0']:.6f}, "
-          f"inner its {ref['inner'].sum()}, cap hits {int(ref['cap_hit'].sum())}", flush=True)
+    say(f"E3 [{name}] reference: G* = {out['Gstar']:.12f}, W2nu0 = {out['w2nu0']:.6f}, "
+          f"inner its {ref['inner'].sum()}, cap hits {int(ref['cap_hit'].sum())}")
     for key, _, kw in RUNS:
         r = run_outer(grid, tgt, GAMMA, a["T"], kw["accel"], sig, eps0=EPS0, cap=a["cap"], fixed=kw.get("fixed"))
         for f in ("G", "inner", "wall", "cap_hit", "cert"):
             out[f"{key}_{f}"] = r[f]
         out[f"{key}_fails"] = r["fails"]
-        print(f"[{name}] {key}: final gap {r['G'][-1] - out['Gstar']:.3e}, inner its {r['inner'].sum()}, "
-              f"cap hits {int(r['cap_hit'].sum())}, {r['wall'][-1]:.0f}s", flush=True)
+        say(f"E3 [{name}] {key}: final gap {r['G'][-1] - out['Gstar']:.3e}, inner its {r['inner'].sum()}, "
+              f"cap hits {int(r['cap_hit'].sum())}, {r['wall'][-1]:.0f}s")
     return out
 
 
@@ -146,6 +147,7 @@ def ensemble(args):
     T = args.T
     t = np.arange(T + 1)
     a = dict(n=args.n, T=T, cap=args.cap, ref_steps=args.ref_steps, ref_tol=args.ref_tol, ref_cap=args.ref_cap, r=r_best)
+    say(f"E3 ensemble: {args.seeds} instances x (reference + 4 runs)")
     res = run_seeds(ens_work, range(args.seeds), a, args.jobs, os.path.join(d, "seeds"), args.resume)
     n = len(res)
     Gs = stack(res, "Gstar")[:, None]

@@ -1,6 +1,7 @@
 """Shared helpers for the experiment scripts: output paths, plot style (spec 0.8), reference
 curves and the bound of Theorem 1 (spec 0.2), and small reporting utilities."""
 import os
+import time
 from multiprocessing import Pool
 
 import numpy as np
@@ -16,6 +17,16 @@ COLORS = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9"]
 
 mpl.rcParams.update({"font.size": 9, "axes.grid": True, "grid.alpha": 0.25, "legend.fontsize": 7.5,
                      "lines.linewidth": 1.6, "savefig.bbox": "tight", "pdf.fonttype": 42})
+
+
+def say(msg):
+    """Timestamped progress line."""
+    print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
+
+
+def _hms(sec):
+    sec = int(sec)
+    return f"{sec // 3600}h{sec % 3600 // 60:02d}m" if sec >= 3600 else f"{sec // 60}m{sec % 60:02d}s"
 
 
 def outdir(name):
@@ -85,10 +96,19 @@ def run_seeds(work, seeds, cfg, jobs, cache, resume=False):
         else:
             todo.append((s, cfg))
 
+    name = os.path.join(os.path.basename(os.path.dirname(cache)), os.path.basename(cache))
+    say(f"{name}: {len(todo)} seeds to run on {max(1, min(jobs, len(todo)))} processes"
+        + (f" ({len(res)} reused)" if res else ""))
+    t0, n_done = time.time(), [0]
+
     def done(s, out):
         np.savez_compressed(path(s), **out)
         res[s] = {k: np.asarray(v) for k, v in out.items()}
-        print(f"  seed {s} done ({len(res)}/{len(seeds)})", flush=True)
+        n_done[0] += 1
+        el = time.time() - t0
+        left = len(todo) - n_done[0]
+        say(f"{name}: seed {s} done — {len(res)}/{len(seeds)}, elapsed {_hms(el)}"
+            + (f", about {_hms(el / n_done[0] * left)} left" if left else ""))
 
     if jobs > 1 and len(todo) > 1:
         with Pool(min(jobs, len(todo))) as pool:

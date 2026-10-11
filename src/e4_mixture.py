@@ -12,7 +12,7 @@ from multiprocessing import Pool
 import numpy as np
 
 from common import (COLORS, FLOOR, RESULTS, boot_mean, ci, floor, md_table, outdir, plot_band, plt, run_seeds, savefig,
-                    stack, wilson)
+                    say, stack, wilson)
 from grid import Grid, Mix2, truncated_gaussian_weights
 from pdhg import run_outer
 
@@ -45,8 +45,8 @@ def work(job):
                snap_rho=np.stack([r["snaps"][s][1] for s in snaps]))
     key = f"w{w}_{init}_{method}"
     np.savez_compressed(os.path.join(outdir("e4"), f"run_{key}.npz"), **out)
-    print(f"[{key}] G_T = {r['G'][-1]:.6f}, left mass {left:.3f} (target {w}), inner its {r['inner'].sum()}, "
-          f"cap hits {int(r['cap_hit'].sum())}, fails {r['fails']}, {r['wall'][-1]:.0f}s", flush=True)
+    say(f"E4 canonical [{key}] G_T = {r['G'][-1]:.6f}, left mass {left:.3f} (target {w}), inner its {r['inner'].sum()}, "
+          f"cap hits {int(r['cap_hit'].sum())}, fails {r['fails']}, {r['wall'][-1]:.0f}s")
     return key, out
 
 
@@ -62,6 +62,7 @@ def canonical(args):
     a = dict(n=args.n, T=args.T, cap=args.cap, r=r_best)
     d = outdir("e4")
     jobs = [(w, init, m, a) for w in WEIGHTS for init in INITS for m in METHODS]
+    say(f"E4 canonical: {len(jobs)} runs x {args.T} outer steps (cap {args.cap} inner iterations each)")
     if args.jobs > 1:
         with Pool(min(args.jobs, len(jobs))) as pool:
             res = dict(pool.map(work, jobs))
@@ -155,6 +156,7 @@ def ens_work(job):
             out[f"{init}_{m}_left"] = float((wts * (r["X"][..., 0] < 0.5)).sum() * grid.h ** 2)
             out[f"{init}_{m}_inner"] = r["inner"].sum()
             out[f"{init}_{m}_fails"] = r["fails"]
+            say(f"E4 seed {seed} [{init}, {m}]: G_T = {r['G'][-1]:.5f}, left mass {out[f'{init}_{m}_left']:.3f} (w = {w:.3f})")
     return seed, out
 
 
@@ -163,6 +165,7 @@ def ensemble(args):
     r_best, _ = load_r_best()
     T = args.T
     t = np.arange(T + 1)
+    say(f"E4 ensemble: {args.seeds} instances x 2 references x 2 methods")
     res = run_seeds(ens_work, range(args.seeds), dict(n=args.n, T=T, cap=args.cap, r=r_best), args.jobs,
                     os.path.join(d, "seeds"), args.resume)
     n = len(res)

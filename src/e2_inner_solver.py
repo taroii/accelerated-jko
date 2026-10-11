@@ -8,7 +8,7 @@ import os
 import numpy as np
 
 from common import (COLORS, FLOOR, band, boot_median, ci, first_below, floor, md_table, outdir, plot_band, plt,
-                    run_seeds, savefig, stack)
+                    run_seeds, savefig, say, stack)
 from grid import Gauss, Grid, Quartic
 from pdhg import ProxProblem, pdhg
 
@@ -64,6 +64,7 @@ def canonical(args):
     balanced = {}
     for tgt in targets():
         prob = ProxProblem(grid, tgt, GAMMA, field_Y(grid))
+        say(f"E2 canonical [{tgt.name}]: reference run, {args.ref_iters} iterations")
         Jstar, ref = reference(prob, args.ref_iters)
         st = ref["state"]
         psi_c = ref["last"]["c"]
@@ -98,6 +99,7 @@ def canonical(args):
     gbig = Grid(args.n_big)
     for tgt in targets():
         prob = ProxProblem(gbig, tgt, GAMMA, field_Y(gbig))
+        say(f"E2 canonical [{tgt.name}]: n = {args.n_big} scaling run (reference + {args.iters} iterations)")
         Jstar, _ = reference(prob, args.ref_iters)
         run = pdhg(prob, 1.0, r_best, args.iters, theta=THETA, record=True)
         R[tgt.name][f"n={args.n_big}, r={r_best:g}"] = summarize(run, Jstar, prob.h2)
@@ -233,6 +235,7 @@ def ens_work(job):
 
 def ensemble(args):
     d = outdir("e2")
+    say(f"E2 ensemble: {args.seeds} instances x {len(CONFIGS)} solver configurations")
     res = run_seeds(ens_work, range(args.seeds), dict(n=args.n, iters=args.iters, ref_iters=args.ref_iters), args.jobs,
                     os.path.join(d, "seeds"), args.resume)
     n = len(res)

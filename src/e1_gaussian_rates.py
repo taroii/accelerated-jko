@@ -8,7 +8,7 @@ import numpy as np
 
 import gaussian as ga
 from common import (COLORS, FLOOR, add_references, band, boot_mean, ci, floor, md_table, outdir, plot_band, plt,
-                    run_seeds, savefig, stack, theorem_bound, wilson)
+                    run_seeds, savefig, say, stack, theorem_bound, wilson)
 
 GAMMA = 0.5
 METHODS = [("accel", "Alg. 1 (accelerated, fixed reference)"),
@@ -48,6 +48,7 @@ def canonical(args):
              f"gamma = {GAMMA}, T = {T}. gap_t = KL(x_t | q), G* = 0.\n"]
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     for ax, (cname, Q) in zip(axes, cases.items()):
+        say(f"E1 canonical: {cname} target, 4 methods x {T} steps")
         out = run_all(Zc, Q, T)
         P = ga.ot_map(Zc, Q)
         w2 = ga.norm2_nu(np.eye(2) - P, Zc)
@@ -84,6 +85,7 @@ def canonical(args):
     lams = np.logspace(-3, 0, 13)
     N = args.sweep_steps
     final = {k: [] for k in ("accel", "mm", "jko")}
+    say(f"E1 canonical: lambda sweep, {len(lams)} values x {N} steps")
     for lam in lams:
         out = run_all(Zc, np.eye(2) / lam, N, methods=("accel", "mm", "jko"))
         for k in final:
@@ -160,6 +162,7 @@ def ensemble(args):
     d = outdir("e1")
     T = args.T
     t = np.arange(T + 1)
+    say(f"E1 ensemble: {args.seeds} instances x 2 regimes x 4 methods")
     res = run_seeds(ens_work, range(args.seeds), dict(T=T), args.jobs, os.path.join(d, "seeds"), args.resume)
     n = len(res)
     lines = [f"\n# Ensemble over {n} random instances\n\nSeed = instance: Zc = R(theta) diag(e^a1, e^a2) R(theta)^T with "
@@ -206,6 +209,7 @@ def ensemble(args):
 
     if args.sweep_seeds > 0:
         lams = np.logspace(-3, 0, 13)
+        say(f"E1 ensemble: lambda sweep, {args.sweep_seeds} references x {len(lams)} values")
         sres = run_seeds(sweep_work, range(args.sweep_seeds), dict(lams=lams, sweep_steps=args.sweep_steps), args.jobs,
                          os.path.join(d, "seeds_sweep"), args.resume)
         N = args.sweep_steps

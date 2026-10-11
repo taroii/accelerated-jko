@@ -28,8 +28,13 @@ fi
 [ -n "${SEEDS:-}" ] && COMMON="$COMMON --seeds $SEEDS"
 OUT="${AJKO_RESULTS:-results}"
 mkdir -p "$OUT"
-$PY src/test_units.py | tee "$OUT/unit_tests.txt"      # aborts here if any test fails
+export PYTHONUNBUFFERED=1
+stamp() { echo; echo "=== [$(date +%H:%M:%S)] $* ==="; }
+stamp "unit tests"
+$PY src/test_units.py > "$OUT/unit_tests.txt" || { cat "$OUT/unit_tests.txt"; exit 1; }   # aborts if any test fails
+tail -1 "$OUT/unit_tests.txt"
 for e in $EXPS; do
+  stamp "$e  (jobs: $JOBS, experiments queued: $EXPS)"
   case "$e" in
     e1) $PY src/e1_gaussian_rates.py $A_e1 $COMMON ;;
     e2) $PY src/e2_inner_solver.py   $A_e2 $COMMON ;;
@@ -38,4 +43,4 @@ for e in $EXPS; do
     *)  echo "unknown experiment: $e" >&2; exit 1 ;;
   esac
 done
-echo "done -> $OUT/"
+stamp "all done -> $OUT/"
