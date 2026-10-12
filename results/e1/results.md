@@ -50,6 +50,24 @@ d = 2, nu = N(0, Zc), Zc = R(pi/5) diag(6.25, 2.25) R(pi/5)^T, gamma = 0.5, T = 
 | 5.623e-01 | -5.551e-17 | 0.000e+00 | 4.930e-32 |
 | 1.000e+00 | 0.000e+00 | 0.000e+00 | 1.972e-31 |
 
+# Flat targets: Q = (1/lam) I, 1000 steps, canonical reference
+
+- lam = 0.001: W_2^2(nu, rho*) = 1755.5178; max_t gap/bound for Alg. 1: 0.1511
+- lam = 0.01: W_2^2(nu, rho*) = 128.5000; max_t gap/bound for Alg. 1: 0.1850
+- lam = 0.1: W_2^2(nu, rho*) = 3.2018; max_t gap/bound for Alg. 1: 0.2174
+
+| lam | method | steps to gap 1e-2 | steps to gap 1e-4 | gap at t=100 | gap at t=1000 |
+|---|---|---|---|---|---|
+| 0.001 | Alg. 1 (accelerated, fixed reference) | 90 | 103 | 6.897e-04 | 1.335e-07 |
+| 0.001 | fixed-reference minimizing movement (\alpha_t\equiv1) | >1000 | >1000 | 1.419e+00 | 9.026e-02 |
+| 0.001 | plain JKO | >1000 | >1000 | 1.419e+00 | 9.026e-02 |
+| 0.01 | Alg. 1 (accelerated, fixed reference) | 29 | 34 | 2.308e-05 | 5.729e-11 |
+| 0.01 | fixed-reference minimizing movement (\alpha_t\equiv1) | 198 | 425 | 8.438e-02 | 1.061e-09 |
+| 0.01 | plain JKO | 198 | 425 | 8.438e-02 | 1.061e-09 |
+| 0.1 | Alg. 1 (accelerated, fixed reference) | 9 | 12 | 1.197e-09 | 0.000e+00 |
+| 0.1 | fixed-reference minimizing movement (\alpha_t\equiv1) | 17 | 40 | 1.034e-09 | 5.551e-17 |
+| 0.1 | plain JKO | 17 | 40 | 1.034e-09 | 3.944e-30 |
+
 # Ensemble over 100 random instances
 
 Seed = instance: Zc = R(theta) diag(e^a1, e^a2) R(theta)^T with theta ~ U(0, pi), a_i ~ U(0, log 10); Q = R(theta') diag(1/lam1, 1/lam2) R(theta')^T with lam_i log-uniform on [0.02, 0.2] (weak) or [0.5, 5] (strong). All four methods run on the same instance. Reported quantity: the bound utilisation u_t = gap_t gamma (t+1)^2 / (2 W_{2,nu}^2(x_0, rho*)); Theorem 1 says u_t <= 1 for Alg. 1 on every instance. Tables: mean [95% bootstrap CI of the mean, 2000 resamples]; figures: median and 2.5-97.5 percentile band. Gaps are floored at 1e-14 before taking log-ratios.

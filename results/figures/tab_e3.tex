@@ -1,0 +1,13 @@
+% requires booktabs
+\begin{tabular}{llrrrr}
+\toprule
+ & & \multicolumn{3}{c}{normalised gap after $t$ steps} & inner \\
+\cmidrule(lr){3-5}
+inner accuracy & outer scheme & $t=50$ & $t=100$ & $t=300$ & iterations \\
+\midrule
+50 inner iterations per step & accelerated (Alg. 1) & $\mathbf{2.9\times10^{-4}}$ & $\mathbf{1.2\times10^{-5}}$ & $\mathbf{4.7\times10^{-9}}$ & 15\,000 \\
+50 inner iterations per step & non-accelerated & $2.9\times10^{-2}$ & $3.6\times10^{-3}$ & $8.2\times10^{-6}$ & 15\,000 \\
+certified accuracy & accelerated (Alg. 1) & $\mathbf{2.9\times10^{-4}}$ & $\mathbf{1.2\times10^{-5}}$ & $\mathbf{4.7\times10^{-9}}$ & 43\,412 \\
+certified accuracy & non-accelerated & $2.9\times10^{-2}$ & $3.6\times10^{-3}$ & $8.2\times10^{-6}$ & 45\,975 \\
+\bottomrule
+\end{tabular}

@@ -1,0 +1,12 @@
+% requires booktabs
+\begin{tabular}{c rr rr rr}
+\toprule
+ & \multicolumn{2}{c}{steps to gap $10^{-2}$} & \multicolumn{2}{c}{steps to gap $10^{-4}$} & \multicolumn{2}{c}{gap after 100 steps} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+$\lambda$ & accel. & JKO & accel. & JKO & accel. & JKO \\
+\midrule
+$10^{-3}$ & \textbf{90} & $>1000$ & \textbf{103} & $>1000$ & $\mathbf{6.9\times10^{-4}}$ & $1.4$ \\
+$10^{-2}$ & \textbf{29} & 198 & \textbf{34} & 425 & $\mathbf{2.3\times10^{-5}}$ & $8.4\times10^{-2}$ \\
+$10^{-1}$ & \textbf{9} & 17 & \textbf{12} & 40 & $1.2\times10^{-9}$ & $\mathbf{1.0\times10^{-9}}$ \\
+\bottomrule
+\end{tabular}

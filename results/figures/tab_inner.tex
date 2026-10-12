@@ -1,0 +1,15 @@
+% requires booktabs
+\begin{tabular}{l rrr}
+\toprule
+ & \multicolumn{3}{c}{iterations to relative gap} \\
+\cmidrule(lr){2-4}
+inner solver & $10^{-4}$ & $10^{-6}$ & $10^{-8}$ \\
+\midrule
+scalar-step PDHG & $>3000$ (0/50) & $>3000$ (0/50) & $>3000$ (0/50) \\
+preconditioned, $(\sigma_\Lambda,\sigma_\mu)=$ (1, 1) & 154 [142, 161] & 277 [245, 305] & 425 [375, 476] \\
+preconditioned, $(\sigma_\Lambda,\sigma_\mu)=$ (1, 10) & 54 [53, 57] & \textbf{86} [81, 89] & \textbf{121} [111, 126] \\
+preconditioned, $(\sigma_\Lambda,\sigma_\mu)=$ (1, 100) & \textbf{52} [51, 56] & 89 [86, 92] & 128 [120, 135] \\
+preconditioned, $(\sigma_\Lambda,\sigma_\mu)=$ (10, 100) & 502 [491, 533] & 849 [819, 881] & 1229 [1160, 1285] \\
+preconditioned, balanced steps \eqref{eq:balance} & 57 [51, 61] & 98 [87, 102] & 136 [123, 148] \\
+\bottomrule
+\end{tabular}
