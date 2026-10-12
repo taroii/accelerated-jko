@@ -20,7 +20,7 @@ if [ "${QUICK:-0}" = "1" ]; then
   export AJKO_RESULTS=results_smoke
   SEEDS="${SEEDS:-3}"
   A_e2="--n 32 --n-big 48 --iters 400 --ref-iters 2000"
-  A_e1="--T 30 --sweep-steps 20 --sweep-seeds 3"
+  A_e1="--T 30 --sweep-steps 20 --sweep-seeds 3 --flat-steps 30"
   A_e3="--n 32 --T 12 --ref-steps 40"
   A_e4="--n 32 --T 5 --cap 200"
 else

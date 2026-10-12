@@ -34,7 +34,7 @@ Each experiment has two parts, both written to the same `results.md`:
 1. the **canonical** fixed instance of the spec (`<exp>.npz`, `fig_<exp>.*`);
 2. an **ensemble** over random problem instances (`<exp>_ensemble.npz`, `fig_<exp>_ens.*`).
 
-Rough cost in CPU-hours (divide by the core count): E1 about 1.5, E2 about 0.5, E3 about 1–3,
+Rough cost in CPU-hours (divide by the core count): E1 about 1.5, E2 about 0.5, E3 about 1,
 E4 about 16 (4 ms per inner iteration, and nearly every step runs to the 2000-iteration cap).
 
 ## Statistics
@@ -84,11 +84,15 @@ handoff/    the specification, the paper source, and the earlier prototypes
 | `src/e2_inner_solver.py` | **E2** — inner solver: scalar vs preconditioned, channel ratio, balanced steps, n-scaling, certificate |
 | `src/e3_end_to_end.py` | **E3** — outer scheme with the inner solver, certified schedule vs fixed budget |
 | `src/e4_mixture.py` | **E4** — non-log-concave mixture target, three reference measures |
+| `src/paper_figures.py` | figures and tables for the paper, built from the saved results into `results/figures/` (run after the experiments) |
 
 ## Status of `results/`
 
-`results/e1` and `results/e2` hold full runs of the canonical instances only. The ensembles and
-all of E3/E4 have only been smoke-tested (`QUICK=1`); their full runs are still to be done.
+`results/e1`, `e2` and `e4` hold full runs (canonical instances and ensembles). `results/e3` must be
+rerun after the change of protocol in deviation 11, and `results/e1` once more for the flat
+targets (`e1_flat.npz`): `RESUME=1 EXPS="e1 e3" ./scripts/run_all.sh`, then
+`python src/paper_figures.py`. E4 is kept as a record but is not used in the paper: neither
+scheme recovers the mode weights (0/20 instances).
 
 ## Deviations from the spec
 
@@ -118,5 +122,12 @@ all of E3/E4 have only been smoke-tested (`QUICK=1`); their full runs are still 
 9. **`--jobs`** runs independent configurations and seeds in separate processes (default 1 in the
    scripts, half the cores in `run_all.sh`); wall-clock columns are then noisier.
 10. **Ensembles** over random instances are an addition to the spec (see Statistics).
+11. **E3 step size.** E3 runs at `gamma = 5e-4` for 300 outer steps instead of `gamma = 0.05` for
+    60. At 0.05 the targets have `gamma * lambda >= 1`, every scheme converges in under 30 steps
+    and acceleration cannot help (that run is in the git history). The reference run for `G*`
+    keeps `gamma = 0.05`. Certified solves use the stall rule of deviation 8, since the schedule
+    falls below what the certificate resolves. Per-seed files are in `seeds_gamma0.0005/`.
+12. **E1 flat targets.** E1 also runs `Q = I/lam` for `lam = 1e-3, 1e-2, 1e-1` over 1000 steps
+    (`e1_flat.npz`, `fig_e1_flat.*`), the regime where the two rates separate.
 
 Released under the MIT License (see `LICENSE`).

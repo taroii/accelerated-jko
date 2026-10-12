@@ -1,6 +1,7 @@
 """E1 — rates with exact steps (centered Gaussians in d = 2): Algorithm 1 vs the fixed-reference
 minimizing movement, the moving-reference scheme and plain JKO, plus a sweep over the
-strong-convexity parameter. Writes results/e1/{e1.npz, fig_e1.*, fig_e1b.*, results.md}."""
+strong-convexity parameter, and long runs on flat isotropic targets. Writes
+results/e1/{e1.npz, e1_flat.npz, fig_e1.*, fig_e1b.*, fig_e1_flat.*, results.md}."""
 import argparse
 import os
 
@@ -106,6 +107,57 @@ def canonical(args):
                           [[f"{l:.3e}", float(a), float(b), float(c)] for l, a, b, c in
                            zip(lams, final["accel"], final["mm"], final["jko"])]))
     np.savez_compressed(os.path.join(d, "e1.npz"), t=t, Zc=Zc, **data)
+    return lines
+
+
+#  ------------------------------------------------------------------ flat targets
+FLAT_LAMS = (1e-3, 1e-2, 1e-1)
+
+
+def first_step(g, thr):
+    hit = np.nonzero(np.asarray(g) <= thr)[0]
+    return int(hit[0]) if hit.size else None
+
+
+def flat(args):
+    """Long runs on Q = I/lam for small lam, where the two rates separate; canonical reference."""
+    T = args.flat_steps
+    d = outdir("e1")
+    Zc = reference_cov()
+    t = np.arange(T + 1)
+    data = dict(t=t, lams=np.array(FLAT_LAMS))
+    lines = [f"\n# Flat targets: Q = (1/lam) I, {T} steps, canonical reference\n\n"]
+    rows = []
+    fig, axes = plt.subplots(1, len(FLAT_LAMS), figsize=(4 * len(FLAT_LAMS), 3.6), squeeze=False)
+    for ax, lam in zip(axes[0], FLAT_LAMS):
+        say(f"E1 flat target: lambda = {lam:g}, 3 methods x {T} steps")
+        Q = np.eye(2) / lam
+        out = run_all(Zc, Q, T, methods=("accel", "mm", "jko"))
+        w2 = ga.norm2_nu(np.eye(2) - ga.ot_map(Zc, Q), Zc)
+        bound = theorem_bound(w2, GAMMA, t[1:])
+        ratio = float((out["accel"][1:] / bound).max())
+        assert ratio <= 1.0, f"lambda = {lam:g}: gap exceeds the bound of Theorem 1 (ratio {ratio})"
+        for (key, lab), col in zip(METHODS, COLORS):
+            if key in out:
+                ax.loglog(t[1:], floor(out[key][1:]), color=col, label=lab)
+                data[f"{key}_{lam:g}"] = out[key]
+        ax.loglog(t[1:], bound, "k:", lw=1.2, label="bound of Theorem 1")
+        ax.set_ylim(FLOOR / 3, None)
+        ax.set_xlabel("outer step $t$")
+        ax.set_ylabel(r"$G(x_t)-G^\star$")
+        ax.set_title(f"$\\lambda$ = {lam:g}")
+        data[f"w2_{lam:g}"] = w2
+        steps = lambda g: [first_step(g, thr) if first_step(g, thr) is not None else f">{T}" for thr in (1e-2, 1e-4)]
+        tt = [k for k in (100, 1000) if k <= T]
+        rows += [[f"{lam:g}", lab.replace("$", "")] + steps(out[key]) + [float(out[key][k]) for k in tt]
+                 for key, lab in METHODS if key in out]
+        lines.append(f"- lam = {lam:g}: W_2^2(nu, rho*) = {w2:.4f}; max_t gap/bound for Alg. 1: {ratio:.4f}\n")
+    axes[0, 0].legend(loc="lower left")
+    fig.tight_layout()
+    savefig(fig, d, "fig_e1_flat")
+    lines.append("\n")
+    lines.append(md_table(["lam", "method", "steps to gap 1e-2", "steps to gap 1e-4"] + [f"gap at t={k}" for k in tt], rows))
+    np.savez_compressed(os.path.join(d, "e1_flat.npz"), T=T, gamma=GAMMA, Zc=Zc, **data)
     return lines
 
 
@@ -242,6 +294,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--T", type=int, default=300)
     ap.add_argument("--sweep-steps", type=int, default=200)
+    ap.add_argument("--flat-steps", type=int, default=1000, help="steps of the flat-target runs (0 = skip)")
     ap.add_argument("--seeds", type=int, default=100, help="random instances (0 = canonical instance only)")
     ap.add_argument("--sweep-seeds", type=int, default=50, help="random references per lambda in the sweep")
     ap.add_argument("--jobs", type=int, default=1)
@@ -250,6 +303,8 @@ def main():
     args = ap.parse_args()
     path = os.path.join(outdir("e1"), "results.md")
     lines = [] if args.skip_canonical else canonical(args)
+    if args.flat_steps > 0:
+        lines += flat(args)
     with open(path, "w", encoding="utf-8") as f:
         f.write("".join(lines))
     if args.seeds > 0:

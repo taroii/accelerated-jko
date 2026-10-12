@@ -1,5 +1,6 @@
 """E3 — end to end: Algorithm 1 with every proximal step solved by Algorithm 2, certified
-schedule eps_t = eps0 (t+1)^-4.5 vs a fixed inner budget, accelerated vs non-accelerated.
+schedule eps_t = eps0 (t+1)^-4.5 vs a fixed inner budget, accelerated vs non-accelerated, at a
+small step size gamma (many outer steps are needed, which is where acceleration pays).
 Writes results/e3/{e3.npz, fig_e3.*, results.md}. No arguments needed (run E2 first for r_best)."""
 import argparse
 import json
@@ -13,8 +14,10 @@ from e2_inner_solver import random_gauss
 from grid import Gauss, Grid, Quartic
 from pdhg import run_outer
 
-GAMMA = 0.05
+GAMMA = 5e-4        # small step: gamma * (curvature of the targets) ~ 0.01-0.05, so hundreds of plain steps are needed
+GAMMA_REF = 0.05    # the reference run for G* uses a large step (the minimiser does not depend on gamma)
 EPS0 = 1e-2
+STALL = 1e-10       # a certified solve also ends once its iterate has stopped moving (certificate at its floor)
 RUNS = [("accel_cert", "accelerated, certified $\\varepsilon_t$", dict(accel=True)),
         ("mm_cert", "non-accelerated, certified $\\varepsilon_t$", dict(accel=False)),
         ("accel_fixed", "accelerated, 50 inner its", dict(accel=True, fixed=50)),
@@ -40,7 +43,7 @@ def run_instance(tgt, a, name):
     out = {}
     say(f"E3 [{name}]: reference run, {a['ref_steps']} minimizing-movement steps")
     # reference: fixed-reference minimizing movement at a constant certificate
-    ref = run_outer(grid, tgt, GAMMA, a["ref_steps"], False, sig, tol_const=a["ref_tol"], cap=a["ref_cap"])
+    ref = run_outer(grid, tgt, GAMMA_REF, a["ref_steps"], False, sig, tol_const=a["ref_tol"], cap=a["ref_cap"])
     out["ref_G"] = ref["G"]
     out["ref_inner"] = ref["inner"]
     out["ref_cap_hit"] = ref["cap_hit"]
@@ -49,12 +52,13 @@ def run_instance(tgt, a, name):
     say(f"E3 [{name}] reference: G* = {out['Gstar']:.12f}, W2nu0 = {out['w2nu0']:.6f}, "
           f"inner its {ref['inner'].sum()}, cap hits {int(ref['cap_hit'].sum())}")
     for key, _, kw in RUNS:
-        r = run_outer(grid, tgt, GAMMA, a["T"], kw["accel"], sig, eps0=EPS0, cap=a["cap"], fixed=kw.get("fixed"))
-        for f in ("G", "inner", "wall", "cap_hit", "cert"):
+        r = run_outer(grid, tgt, GAMMA, a["T"], kw["accel"], sig, eps0=EPS0, cap=a["cap"], fixed=kw.get("fixed"),
+                      stall=STALL)
+        for f in ("G", "inner", "wall", "cap_hit", "cert", "stalled"):
             out[f"{key}_{f}"] = r[f]
         out[f"{key}_fails"] = r["fails"]
         say(f"E3 [{name}] {key}: final gap {r['G'][-1] - out['Gstar']:.3e}, inner its {r['inner'].sum()}, "
-              f"cap hits {int(r['cap_hit'].sum())}, {r['wall'][-1]:.0f}s")
+              f"cap hits {int(r['cap_hit'].sum())}, stalled {int(r['stalled'].sum())}, {r['wall'][-1]:.0f}s")
     return out
 
 
@@ -83,9 +87,10 @@ def canonical(args):
     t = np.arange(T + 1)
     lines = [f"# E3 — end to end\n\nn = {args.n}, nu uniform, gamma = {GAMMA}, T = {T} outer steps, inner solver "
              f"(sig_L, sig_m) = (1, {r_best:g})" + ("" if found else " [r_best.json missing: default 10]") +
-             f", eps_t = {EPS0:g} (t+1)^-4.5 on the projected certificate (h^2-weighted units), cap {args.cap}. "
-             f"G* = min G over {args.ref_steps} minimizing-movement steps at certificate {args.ref_tol:g} "
-             f"(cap {args.ref_cap}). G is normalised so that G = KL(x | q), q a density on the box.\n"]
+             f", eps_t = {EPS0:g} (t+1)^-4.5 on the projected certificate (h^2-weighted units), cap {args.cap}; "
+             f"a certified solve also ends ('stalled') once its coefficients move by less than {STALL:g} (relative) "
+             f"over 25 iterations. G* = min G over {args.ref_steps} minimizing-movement steps with gamma = {GAMMA_REF} "
+             f"at certificate {args.ref_tol:g} (cap {args.ref_cap}). G is normalised so that G = KL(x | q), q a density on the box.\n"]
     fig, axes = plt.subplots(2, 2, figsize=(10, 7))
     data = {}
     for row, nm in enumerate(names):
@@ -103,17 +108,18 @@ def canonical(args):
             ax.set_ylim(FLOOR / 3, None)
             ax.set_ylabel(r"$G(x_t)-G^\star$")
             ax.set_title(nm)
-        tt = [k for k in (10, 30, 60) if k <= T]
+        tt = [k for k in TT if k <= T]
         lo = min(10, T // 2)
         sel = (t >= lo) & (t <= T) & (gaps["accel_cert"] > FLOOR)
         slope = float(np.polyfit(np.log(t[sel]), np.log(gaps["accel_cert"][sel]), 1)[0]) if sel.sum() > 2 else float("nan")
         lines.append(f"\n## Target: {nm}\n\nG* = {Gs:.12f}; W_{{2,nu}}^2(x_0, rho*) = {o['w2nu0']:.6f}; reference run used "
                      f"{int(o['ref_inner'].sum())} inner iterations, cap hit in {int(o['ref_cap_hit'].sum())} steps.\n\n")
         rows = [[lab.replace("$", "").replace("\\varepsilon_t", "eps_t")] + [float(gaps[key][k]) for k in tt]
-                + [int(o[f"{key}_inner"].sum()), int(o[f"{key}_cap_hit"].sum()), float(gaps[key].min()),
+                + [int(o[f"{key}_inner"].sum()), int(o[f"{key}_cap_hit"].sum()), int(o[f"{key}_stalled"].sum()),
+                   float(gaps[key].min()),
                    f"{o[f'{key}_wall'][-1]:.0f}"] for key, lab, _ in RUNS]
         lines.append(md_table(["run"] + [f"gap at t={k}" for k in tt] +
-                              ["total inner its", "steps at cap", "min gap (signed)", "wall (s)"], rows))
+                              ["total inner its", "steps at cap", "steps stalled", "min gap (signed)", "wall (s)"], rows))
         lines.append(f"\n- empirical slope of the accelerated certified run, log gap vs log t on t in [{lo}, {T}]: {slope:.2f}\n"
                      f"- max_t gap/bound (accelerated, certified): {float((gaps['accel_cert'][1:] / bound).max()):.4f}\n"
                      f"- steps with no admissible inner iterate: " +
@@ -123,7 +129,7 @@ def canonical(args):
     axes[0, 0].legend(loc="lower left")
     fig.tight_layout()
     savefig(fig, d, "fig_e3")
-    np.savez_compressed(os.path.join(d, "e3.npz"), r_best=r_best, **data)
+    np.savez_compressed(os.path.join(d, "e3.npz"), r_best=r_best, gamma=GAMMA, **data)
     for nm in names:
         os.remove(os.path.join(d, f"e3_{nm}.npz"))
     return lines
@@ -131,7 +137,8 @@ def canonical(args):
 
 #  ------------------------------------------------------------------ ensemble over random instances
 GFLOOR = 1e-13
-REL = (1e-4, 1e-8)
+REL = (1e-2, 1e-4, 1e-6)
+TT = (20, 50, 100, 300)
 
 
 def ens_work(job):
@@ -147,7 +154,7 @@ def ensemble(args):
     t = np.arange(T + 1)
     a = dict(n=args.n, T=T, cap=args.cap, ref_steps=args.ref_steps, ref_tol=args.ref_tol, ref_cap=args.ref_cap, r=r_best)
     say(f"E3 ensemble: {args.seeds} instances x (reference + 4 runs)")
-    res = run_seeds(ens_work, range(args.seeds), a, args.jobs, os.path.join(d, "seeds"), args.resume)
+    res = run_seeds(ens_work, range(args.seeds), a, args.jobs, os.path.join(d, f"seeds_gamma{GAMMA:g}"), args.resume)
     n = len(res)
     Gs = stack(res, "Gstar")[:, None]
     gap = {key: np.maximum(stack(res, f"{key}_G") - Gs, 0.0) for key, _, _ in RUNS}
@@ -157,7 +164,7 @@ def ensemble(args):
              f"each with its own reference run for G*. Tables: mean [95% bootstrap CI of the mean]; inner iterations: median "
              f"[95% bootstrap CI of the median], runs that never reach the gap are right-censored. Gaps are floored at "
              f"{GFLOOR:g} before taking log-ratios.\n\n"]
-    tt = [k for k in (10, 30, 60) if k <= T]
+    tt = [k for k in TT if k <= T]
     lines.append("Normalised gap (G(x_t) - G*)/(G(x_0) - G*):\n\n")
     lines.append(md_table(["run"] + [f"t={k}" for k in tt],
                           [[lab.replace("$", "").replace("\\varepsilon_t", "eps_t")] + [ci(boot_mean(rel[key][:, k])) for k in tt]
@@ -178,7 +185,7 @@ def ensemble(args):
         row.append(f"{int(stack(res, f'{key}_cap_hit').sum())}")
         rows.append(row)
     lines.append("\nTotal inner iterations until the normalised outer gap first drops below a level:\n\n")
-    lines.append(md_table(["run", "to 1e-4", "reached", "to 1e-8", "reached", "steps at cap (all instances)"], rows))
+    lines.append(md_table(["run"] + [x for th in REL for x in (f"to {th:g}", "reached")] + ["steps at cap (all instances)"], rows))
     bound = 2 * stack(res, "w2nu0")[:, None] / (GAMMA * (t[None, 1:] + 1.0) ** 2)
     u = (gap["accel_cert"][:, 1:] / bound).max(axis=1)
     lines.append(f"\n- accelerated certified run, max_t gap/bound of Theorem 1: max over instances {u.max():.4f}, "
@@ -203,7 +210,7 @@ def ensemble(args):
     axes[1].legend()
     fig.tight_layout()
     savefig(fig, d, "fig_e3_ens")
-    np.savez_compressed(os.path.join(d, "e3_ensemble.npz"), r_best=r_best,
+    np.savez_compressed(os.path.join(d, "e3_ensemble.npz"), r_best=r_best, gamma=GAMMA,
                         **{k: stack(res, k) for k in res[0] if np.asarray(res[0][k]).dtype != object})
     return lines
 
@@ -211,7 +218,7 @@ def ensemble(args):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--n", type=int, default=64)
-    ap.add_argument("--T", type=int, default=60)
+    ap.add_argument("--T", type=int, default=300)
     ap.add_argument("--cap", type=int, default=5000)
     ap.add_argument("--ref-steps", type=int, default=1500)
     ap.add_argument("--ref-tol", type=float, default=1e-10)
