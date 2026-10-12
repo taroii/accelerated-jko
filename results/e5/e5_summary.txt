@@ -1,0 +1,145 @@
+E5a — one proximal step against gamma: 50 instances of E2, n = 64, at most 5000 iterations, median [95% bootstrap CI] iterations to a relative gap (k/n = instances that reached it)
+
+(sig_L, sig_m) = (1, 100)
+  gamma     to 0.0001                 to 1e-06                  to 1e-08                  
+  0.0005    156 [118, 287]            4189 [3223, inf] (25/48)  >5000 (8/41)              
+  0.002     21 [18, 26]               157 [114, 273]            446 [263, 585]            
+  0.005     22 [21, 23]               40 [38, 44]               62 [55, 70]               
+  0.01      31 [31, 32]               54 [52, 57]               78 [75, 82]               
+  0.02      42 [41, 44]               73 [69, 74]               103 [98, 107]             
+  0.05      52 [51, 56]               89 [86, 92]               128 [120, 135]            
+  0.1       58 [56, 62]               99 [93, 104]              142 [134, 149]            
+  0.2       62 [59, 68]               106 [96, 112]             152 [137, 161]            
+
+balanced steps (15)
+  gamma     to 0.0001                 to 1e-06                  to 1e-08                  
+  0.0005    22 [20, 33]               647 [475, 844]            1605 [1206, 2694] (37/41) 
+  0.002     25 [23, 25]               83 [65, 96]               155 [137, 299]            
+  0.005     34 [33, 36]               64 [59, 67]               94 [92, 104]              
+  0.01      42 [40, 44]               78 [70, 81]               112 [99, 119]             
+  0.02      49 [47, 52]               88 [77, 91]               127 [107, 132]            
+  0.05      56 [51, 61]               97 [87, 102]              135 [123, 148]            
+  0.1       60 [56, 65]               101 [89, 108]             142 [134, 154]            
+  0.2       65 [58, 68]               106 [96, 112]             149 [143, 160]            
+
+balanced steps, median over instances (sig_L, sig_m, ratio):
+  gamma = 0.0005  3.66, 734.8, 210.8
+  gamma = 0.002   2.11, 192.7, 93.12
+  gamma = 0.005   1.68, 88.46, 57.84
+  gamma = 0.01    1.34, 61.29, 43.74
+  gamma = 0.02    1.16, 48.4, 42.17
+  gamma = 0.05    1.04, 43.84, 41.79
+  gamma = 0.1     0.996, 43.35, 42.78
+  gamma = 0.2     0.977, 42.97, 42.82
+
+reference for J*: instances whose J* is too uncertain for a tolerance (left out of that entry; k/n counts the rest), largest relative certificate, largest relative amount by which a measured run went below the reference, reference runs used
+  gamma = 0.0005  undetermined at (0.0001, 1e-06, 1e-08): (0, 2, 9) of 50; certificate 2.2e-06; shift 1.9e-10; reference runs 2.50 on average
+  gamma = 0.002   undetermined at (0.0001, 1e-06, 1e-08): (0, 0, 0) of 50; certificate 4.4e-11; shift 4.7e-17; reference runs 1.04 on average
+  gamma = 0.005   undetermined at (0.0001, 1e-06, 1e-08): (0, 0, 0) of 50; certificate 8.7e-14; shift 0.0e+00; reference runs 1.00 on average
+  gamma = 0.01    undetermined at (0.0001, 1e-06, 1e-08): (0, 0, 0) of 50; certificate 9.9e-14; shift 0.0e+00; reference runs 1.00 on average
+  gamma = 0.02    undetermined at (0.0001, 1e-06, 1e-08): (0, 0, 0) of 50; certificate 9.5e-14; shift 1.1e-16; reference runs 1.00 on average
+  gamma = 0.05    undetermined at (0.0001, 1e-06, 1e-08): (0, 0, 0) of 50; certificate 1.2e-13; shift 1.8e-16; reference runs 1.00 on average
+  gamma = 0.1     undetermined at (0.0001, 1e-06, 1e-08): (0, 0, 0) of 50; certificate 1.2e-13; shift 6.3e-17; reference runs 1.00 on average
+  gamma = 0.2     undetermined at (0.0001, 1e-06, 1e-08): (0, 0, 0) of 50; certificate 1.2e-13; shift 3.7e-17; reference runs 1.00 on average
+
+iterates with I + K1 psi not positive definite after the first admissible one, summed over instances and gamma: fixed steps 3671, balanced 23918
+wall-clock per instance and gamma (reference + two runs): median 31 s
+
+
+E5b — total inner iterations to a normalised outer gap against gamma. n = 64, at most 2000 outer steps, 100000 inner iterations, or until the best gap has not halved in 500 steps. Inner budgets available: Gaussian targets [10, 25, 50, 100], quartic [10, 25, 50, 100].
+
+Gaussian targets (20), b = 50: median total inner iterations [95% CI] (k/n reached), then median outer steps
+
+  to normalised gap 0.0001
+  gamma     accelerated                       non-accelerated                   steps acc / non-acc    median 1/(gamma lam)
+  0.0005    2800 [2350, 2950]                 10550 [7350, 12700]               56 / 216               69.3
+  0.002     1150 [1050, 1350]                 2750 [1950, 3250]                 24 / 56                17.3
+  0.005     650 [550, 800]                    1150 [850, 1350]                  14 / 24                6.9
+  0.01      400 [350, 500]                    650 [500, 750]                    8 / 13                 3.5
+  0.02      250 [200, 250]                    350 [300, 400]                    5 / 7                  1.7
+  0.05      200 [150, 200]                    200 [200, 250]                    4 / 4                  0.7
+  0.1       150 [150, 150]                    150 [150, 150]                    3 / 3                  0.3
+  0.2       100 [100, 150]                    100 [100, 150]                    2 / 2                  0.2
+
+  to normalised gap 1e-06
+  gamma     accelerated                       non-accelerated                   steps acc / non-acc    median 1/(gamma lam)
+  0.0005    5750 [5400, 6650]                 17600 [12700, 21200]              115 / 370              69.3
+  0.002     2250 [2150, 2550]                 4500 [3300, 5400]                 45 / 94                17.3
+  0.005     1100 [1000, 1250]                 1900 [1400, 2250]                 22 / 40                6.9
+  0.01      750 [650, 800]                    1050 [800, 1200]                  15 / 22                3.5
+  0.02      500 [450, 550]                    600 [450, 700]                    10 / 12                1.7
+  0.05      350 [300, 350]                    350 [250, 350]                    7 / 7                  0.7
+  0.1       250 [200, 250]                    250 [200, 250]                    5 / 5                  0.3
+  0.2       150 [150, 150]                    200 [150, 200]                    3 / 4                  0.2
+
+  how the runs ended (accelerated / non-accelerated), and steps without an admissible inner iterate:
+  gamma = 0.0005  reached 1e-6: 20 / 20; inner-iteration budget: 0 / 0; stalled: 0 / 0; T_max: 0 / 0; inadmissible steps 0 / 0
+  gamma = 0.002   reached 1e-6: 20 / 20; inner-iteration budget: 0 / 0; stalled: 0 / 0; T_max: 0 / 0; inadmissible steps 0 / 0
+  gamma = 0.005   reached 1e-6: 20 / 20; inner-iteration budget: 0 / 0; stalled: 0 / 0; T_max: 0 / 0; inadmissible steps 0 / 0
+  gamma = 0.01    reached 1e-6: 20 / 20; inner-iteration budget: 0 / 0; stalled: 0 / 0; T_max: 0 / 0; inadmissible steps 0 / 0
+  gamma = 0.02    reached 1e-6: 20 / 20; inner-iteration budget: 0 / 0; stalled: 0 / 0; T_max: 0 / 0; inadmissible steps 0 / 0
+  gamma = 0.05    reached 1e-6: 20 / 20; inner-iteration budget: 0 / 0; stalled: 0 / 0; T_max: 0 / 0; inadmissible steps 0 / 0
+  gamma = 0.1     reached 1e-6: 20 / 20; inner-iteration budget: 0 / 0; stalled: 0 / 0; T_max: 0 / 0; inadmissible steps 0 / 0
+  gamma = 0.2     reached 1e-6: 20 / 20; inner-iteration budget: 0 / 0; stalled: 0 / 0; T_max: 0 / 0; inadmissible steps 0 / 0
+
+  wall-clock per run: median 1 s, total 0.2 CPU-hours
+
+Best cost per target: min over gamma of total inner iterations; paired log10(non-accelerated / accelerated), median [95% bootstrap CI] (positive = acceleration needs less work)
+  to 0.0001, b = 50 only, Gaussian targets: +0.00 [+0.00, +0.00] (factor 1.00) over 20/20 targets
+      median best cost: accelerated 100 [100, 150], non-accelerated 100 [100, 150]; median best gamma over the targets that reached it: accelerated 0.1, non-accelerated 0.2
+  to 0.0001, min over gamma and b in [10, 25, 50, 100], Gaussian targets: +0.00 [+0.00, +0.00] (factor 1.00) over 20/20 targets
+      median best cost: accelerated 80 [70, 90], non-accelerated 80 [70, 90]
+  to 0.0001, quartic target, b in [50]: accelerated 100, non-accelerated 100, log10 ratio +0.00 (factor 1.00)
+  to 0.0001, quartic target, b in [10, 25, 50, 100]: accelerated 40, non-accelerated 40, log10 ratio +0.00 (factor 1.00)
+  to 1e-06, b = 50 only, Gaussian targets: +0.00 [+0.00, +0.12] (factor 1.00) over 20/20 targets
+      median best cost: accelerated 150 [150, 150], non-accelerated 200 [150, 200]; median best gamma over the targets that reached it: accelerated 0.2, non-accelerated 0.2
+  to 1e-06, min over gamma and b in [10, 25, 50, 100], Gaussian targets: +0.00 [+0.00, +0.00] (factor 1.00) over 20/20 targets
+      median best cost: accelerated 120 [110, 140], non-accelerated 120 [110, 140]
+  to 1e-06, quartic target, b in [50]: accelerated 150, non-accelerated 150, log10 ratio +0.00 (factor 1.00)
+  to 1e-06, quartic target, b in [10, 25, 50, 100]: accelerated 60, non-accelerated 60, log10 ratio +0.00 (factor 1.00)
+
+Quartic target: total inner iterations (accelerated / non-accelerated) and how the runs ended
+
+  b = 10
+  gamma     to 0.0001             to 1e-06              ended (acc / non-acc), inadmissible steps
+  0.0005    380 / 1380            730 / 2100            reached 1e-6 / reached 1e-6, 0 / 0
+  0.002     190 / 370             290 / 550             reached 1e-6 / reached 1e-6, 0 / 0
+  0.005     70 / 160              130 / 240             reached 1e-6 / reached 1e-6, 0 / 0
+  0.01      90 / 100              100 / 140             reached 1e-6 / reached 1e-6, 0 / 0
+  0.02      50 / 60               80 / 90               reached 1e-6 / reached 1e-6, 0 / 0
+  0.05      40 / 40               60 / 70               reached 1e-6 / reached 1e-6, 0 / 0
+  0.1       40 / 40               60 / 60               reached 1e-6 / reached 1e-6, 0 / 0
+  0.2       40 / 40               60 / 60               reached 1e-6 / reached 1e-6, 0 / 0
+
+  b = 25
+  gamma     to 0.0001             to 1e-06              ended (acc / non-acc), inadmissible steps
+  0.0005    525 / 3475            1850 / 5275           reached 1e-6 / reached 1e-6, 0 / 0
+  0.002     475 / 925             725 / 1400            reached 1e-6 / reached 1e-6, 0 / 0
+  0.005     175 / 400             325 / 600             reached 1e-6 / reached 1e-6, 0 / 0
+  0.01      125 / 225             250 / 350             reached 1e-6 / reached 1e-6, 0 / 0
+  0.02      100 / 150             200 / 225             reached 1e-6 / reached 1e-6, 0 / 0
+  0.05      75 / 100              150 / 125             reached 1e-6 / reached 1e-6, 0 / 0
+  0.1       75 / 75               125 / 100             reached 1e-6 / reached 1e-6, 0 / 0
+  0.2       50 / 50               75 / 75               reached 1e-6 / reached 1e-6, 0 / 0
+
+  b = 50
+  gamma     to 0.0001             to 1e-06              ended (acc / non-acc), inadmissible steps
+  0.0005    1050 / 6950           3700 / 10550          reached 1e-6 / reached 1e-6, 0 / 0
+  0.002     950 / 1850            1450 / 2800           reached 1e-6 / reached 1e-6, 0 / 0
+  0.005     350 / 800             650 / 1200            reached 1e-6 / reached 1e-6, 0 / 0
+  0.01      250 / 450             500 / 700             reached 1e-6 / reached 1e-6, 0 / 0
+  0.02      200 / 300             200 / 450             reached 1e-6 / reached 1e-6, 0 / 0
+  0.05      150 / 200             300 / 250             reached 1e-6 / reached 1e-6, 0 / 0
+  0.1       150 / 150             250 / 200             reached 1e-6 / reached 1e-6, 0 / 0
+  0.2       100 / 100             150 / 150             reached 1e-6 / reached 1e-6, 0 / 0
+
+  b = 100
+  gamma     to 0.0001             to 1e-06              ended (acc / non-acc), inadmissible steps
+  0.0005    2100 / 13900          7400 / 21100          reached 1e-6 / reached 1e-6, 0 / 0
+  0.002     1900 / 3700           2900 / 5600           reached 1e-6 / reached 1e-6, 0 / 0
+  0.005     700 / 1600            1300 / 2400           reached 1e-6 / reached 1e-6, 0 / 0
+  0.01      500 / 900             1000 / 1400           reached 1e-6 / reached 1e-6, 0 / 0
+  0.02      400 / 600             400 / 900             reached 1e-6 / reached 1e-6, 0 / 0
+  0.05      300 / 400             600 / 500             reached 1e-6 / reached 1e-6, 0 / 0
+  0.1       300 / 300             500 / 400             reached 1e-6 / reached 1e-6, 0 / 0
+  0.2       200 / 200             300 / 300             reached 1e-6 / reached 1e-6, 0 / 0
