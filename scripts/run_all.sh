@@ -5,7 +5,7 @@
 #   ./scripts/run_all.sh                 full runs into results/, on half the CPU cores at low priority
 #   QUICK=1 ./scripts/run_all.sh         smoke test (small grids, few steps, 3 seeds) into results_smoke/
 #   JOBS=4 ./scripts/run_all.sh          number of parallel processes (default: half the cores)
-#   EXPS="e2 e3" ./scripts/run_all.sh    only the named experiments
+#   EXPS="e2 e3" ./scripts/run_all.sh    only the named experiments (e5, the step-size sweep, runs only when named)
 #   RESUME=1 ./scripts/run_all.sh        continue interrupted ensembles from their per-seed files
 #   SEEDS=0 ./scripts/run_all.sh         fixed instances only (or any seed count for all four)
 set -euo pipefail
@@ -23,8 +23,9 @@ if [ "${QUICK:-0}" = "1" ]; then
   A_e1="--T 30 --sweep-steps 20 --sweep-seeds 3 --flat-steps 30"
   A_e3="--n 32 --T 12 --ref-steps 40"
   A_e4="--n 32 --T 5 --cap 200"
+  A_e5="--n 32 --iters 300 --ref-iters 1500 --T-max 60 --budget 3000 --stall-steps 20 --ref-steps 40"
 else
-  A_e2=""; A_e1=""; A_e3=""; A_e4=""
+  A_e2=""; A_e1=""; A_e3=""; A_e4=""; A_e5=""
 fi
 [ -n "${SEEDS:-}" ] && COMMON="$COMMON --seeds $SEEDS"
 OUT="${AJKO_RESULTS:-results}"
@@ -41,6 +42,7 @@ for e in $EXPS; do
     e2) f=e2_inner_solver.py;   A="$A_e2" ;;
     e3) f=e3_end_to_end.py;     A="$A_e3" ;;
     e4) f=e4_mixture.py;        A="$A_e4" ;;
+    e5) f=e5_stepsize.py;       A="$A_e5" ;;
     *)  echo "unknown experiment: $e" >&2; exit 1 ;;
   esac
   rc=0

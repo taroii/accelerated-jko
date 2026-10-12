@@ -156,12 +156,13 @@ def pdhg(prob, sig_L, sig_m, max_iter, theta=0.99, scalar=False, state=None, tol
 
 
 def run_outer(grid, target, gamma, T, accel, sig, wt=None, eps0=None, cap=5000, fixed=None,
-              tol_const=None, snapshots=(), log=None, stall=None):
+              tol_const=None, snapshots=(), log=None, stall=None, stop=None):
     """Algorithm 1 on the grid with X_0 = Z_0 = Id; alpha_t = 2/(t+2) (accel) or 1 (minimizing movement).
 
     Inner accuracy: `fixed` iterations per step, or the certified schedule eps_t = eps0 (t+1)^-4.5
     (or the constant `tol_const`), capped at `cap` inner iterations. Duals and psi are warm-started.
-    `stall` also ends an inner solve once its iterate has stopped moving (see `pdhg`)."""
+    `stall` also ends an inner solve once its iterate has stopped moving (see `pdhg`).
+    `stop(G, inner)`, called after every step with the values so far, ends the run early when true."""
     X = grid.X.copy()
     Z = grid.X.copy()
     state = new_state(grid)
@@ -201,5 +202,7 @@ def run_outer(grid, target, gamma, T, accel, sig, wt=None, eps0=None, cap=5000, 
             snaps[t + 1] = (X.copy(), prob.wt / hess_parts(H)[3])
         if log:
             log(t + 1, Gt, res["iters"], res["cert"])
+        if stop is not None and stop(G, inner):
+            break
     return dict(G=np.array(G), inner=np.array(inner), wall=np.array(wall), cap_hit=np.array(hit),
                 cert=np.array(cert), stalled=np.array(stalled), X=X, Z=Z, c=state["c"], fails=fails, snaps=snaps)

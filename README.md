@@ -84,14 +84,14 @@ handoff/    the specification, the paper source, and the earlier prototypes
 | `src/e2_inner_solver.py` | **E2** — inner solver: scalar vs preconditioned, channel ratio, balanced steps, n-scaling, certificate |
 | `src/e3_end_to_end.py` | **E3** — outer scheme with the inner solver, certified schedule vs fixed budget |
 | `src/e4_mixture.py` | **E4** — non-log-concave mixture target, three reference measures |
+| `src/e5_stepsize.py` | **E5** — step-size sweep: inner iterations per step against gamma (E5a) and total inner iterations to a gap against gamma, accelerated vs non-accelerated (E5b); run with `EXPS=e5` |
 | `src/paper_figures.py` | figures and tables for the paper, built from the saved results into `results/figures/` (run after the experiments) |
 
 ## Status of `results/`
 
-`results/e1`, `e2` and `e4` hold full runs (canonical instances and ensembles). `results/e3` must be
-rerun after the change of protocol in deviation 11, and `results/e1` once more for the flat
-targets (`e1_flat.npz`): `RESUME=1 EXPS="e1 e3" ./scripts/run_all.sh`, then
-`python src/paper_figures.py`. E4 is kept as a record but is not used in the paper: neither
+All of `results/` comes from full runs on one machine (Intel Core i9-14900KF, 32 GB, Windows 11,
+`JOBS=4`): canonical instances and ensembles for E1–E4, and the paper's figures and tables in
+`results/figures/`. E4 (6 h 37 min) is kept as a record but is not used in the paper: neither
 scheme recovers the mode weights (0/20 instances).
 
 ## Deviations from the spec
