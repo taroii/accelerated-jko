@@ -1,7 +1,3 @@
-"""E1 — rates with exact steps (centered Gaussians in d = 2): Algorithm 1 vs the fixed-reference
-minimizing movement, the moving-reference scheme and plain JKO, plus a sweep over the
-strong-convexity parameter, and long runs on flat isotropic targets. Writes
-results/e1/{e1.npz, e1_flat.npz, fig_e1.*, fig_e1b.*, fig_e1_flat.*, results.md}."""
 import argparse
 import os
 
@@ -38,7 +34,6 @@ def run_all(Zc, Q, T, methods=("accel", "mm", "moving", "jko")):
 
 
 def canonical(args):
-    """The fixed instance of the spec."""
     T = args.T
     d = outdir("e1")
     Zc = reference_cov()
@@ -82,7 +77,6 @@ def canonical(args):
     fig.tight_layout()
     savefig(fig, d, "fig_e1")
 
-    #  -- lambda sweep: Q = (1/lam) I
     lams = np.logspace(-3, 0, 13)
     N = args.sweep_steps
     final = {k: [] for k in ("accel", "mm", "jko")}
@@ -110,7 +104,6 @@ def canonical(args):
     return lines
 
 
-#  ------------------------------------------------------------------ flat targets
 FLAT_LAMS = (1e-3, 1e-2, 1e-1)
 
 
@@ -120,7 +113,6 @@ def first_step(g, thr):
 
 
 def flat(args):
-    """Long runs on Q = I/lam for small lam, where the two rates separate; canonical reference."""
     T = args.flat_steps
     d = outdir("e1")
     Zc = reference_cov()
@@ -161,8 +153,7 @@ def flat(args):
     return lines
 
 
-#  ------------------------------------------------------------------ ensemble over random instances
-REGIMES = {"weak": (0.02, 0.2), "strong": (0.5, 5.0)}      # range of the target precisions lambda_i
+REGIMES = {"weak": (0.02, 0.2), "strong": (0.5, 5.0)}
 UFLOOR = 1e-14
 
 
@@ -172,13 +163,11 @@ def rot(th):
 
 
 def random_reference(rng):
-    """Zc = R(theta) diag(e^a1, e^a2) R(theta)^T, theta ~ U(0, pi), a_i ~ U(log 1, log 10)."""
     Rm = rot(rng.uniform(0, np.pi))
     return Rm @ np.diag(np.exp(rng.uniform(0, np.log(10), 2))) @ Rm.T
 
 
 def ens_work(job):
-    """One seed = one reference and one target per regime; all four methods run on that instance."""
     seed, a = job
     rng = np.random.default_rng([1, seed])
     Zc = random_reference(rng)
@@ -229,7 +218,7 @@ def ensemble(args):
     for ax, reg in zip(axes, REGIMES):
         w2 = stack(res, f"{reg}_w2")[:, None]
         scale = GAMMA * (t[None, :] + 1.0) ** 2 / (2 * w2)
-        U = {key: np.maximum(stack(res, f"{reg}_{key}"), 0.0) * scale for key, _ in METHODS}   # roundoff-negative gaps -> 0
+        U = {key: np.maximum(stack(res, f"{reg}_{key}"), 0.0) * scale for key, _ in METHODS}
         for (key, lab), col in zip(METHODS, COLORS):
             plot_band(ax, t[1:], U[key][:, 1:], col, lab, lo_floor=UFLOOR)
             data[f"{reg}_{key}_u"] = U[key]

@@ -10,3 +10,6 @@ results/*/seeds*/
 run.log
 temp/
 results_pc_backup/
+results/
+LICENSE
+handoff/

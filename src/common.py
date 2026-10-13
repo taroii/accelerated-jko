@@ -1,14 +1,11 @@
-"""Shared helpers for the experiment scripts: output paths, plot style (spec 0.8), reference
-curves and the bound of Theorem 1 (spec 0.2), and small reporting utilities."""
 import faulthandler
 import os
 import sys
 import time
 from multiprocessing import Pool
 
-faulthandler.enable(file=sys.stderr, all_threads=True)      # a hard crash prints the Python stack that caused it
+faulthandler.enable(file=sys.stderr, all_threads=True)
 
-# one numerical thread per process: worker processes inherit this, so N jobs use N cores, not N x cores
 for _v in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
     os.environ.setdefault(_v, "1")
 
@@ -16,10 +13,10 @@ import numpy as np
 import matplotlib as mpl
 
 mpl.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
+import matplotlib.pyplot as plt
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RESULTS = os.path.join(ROOT, os.environ.get("AJKO_RESULTS", "results"))   # smoke runs redirect this
+RESULTS = os.path.join(ROOT, os.environ.get("AJKO_RESULTS", "results"))
 FLOOR = 1e-12
 COLORS = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9"]
 
@@ -28,7 +25,6 @@ mpl.rcParams.update({"font.size": 9, "axes.grid": True, "grid.alpha": 0.25, "leg
 
 
 def say(msg):
-    """Timestamped progress line."""
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
@@ -38,17 +34,16 @@ def _hms(sec):
 
 
 def gentle():
-    """Pool initializer: run the worker at below-normal priority so the machine stays responsive."""
     try:
         os.nice(10)
-    except AttributeError:                                   # Windows
+    except AttributeError:
         try:
             import ctypes
             from ctypes import wintypes
             k32 = ctypes.WinDLL("kernel32", use_last_error=True)
             k32.GetCurrentProcess.restype = wintypes.HANDLE
             k32.SetPriorityClass.argtypes = (wintypes.HANDLE, wintypes.DWORD)
-            k32.SetPriorityClass(k32.GetCurrentProcess(), 0x4000)   # BELOW_NORMAL_PRIORITY_CLASS
+            k32.SetPriorityClass(k32.GetCurrentProcess(), 0x4000)
         except Exception:
             pass
     except OSError:
@@ -76,7 +71,6 @@ def floor(gap):
 
 
 def add_references(ax, t, gap, t_fit=5, bound=None):
-    """Dashed grey C1/t and C2/t^2 through gap[t_fit]; dotted bound of Theorem 1 if given."""
     t = np.asarray(t, float)
     g0 = max(gap[t_fit], FLOOR)
     ax.loglog(t, g0 * t_fit / t, "--", color="0.55", lw=1, label=r"$C_1/t$")
@@ -90,7 +84,6 @@ def theorem_bound(w2nu0, gamma, t):
 
 
 def first_below(gaps, thr):
-    """1-based iteration index of the first gap < thr, or None."""
     idx = np.nonzero(np.asarray(gaps) < thr)[0]
     return int(idx[0]) + 1 if idx.size else None
 
@@ -111,11 +104,7 @@ def md_table(header, rows):
     return "\n".join(out) + "\n"
 
 
-#  ------------------------------------------------------------------ ensembles over random instances
 def run_seeds(work, seeds, cfg, jobs, cache, resume=False):
-    """Run `work((seed, cfg)) -> (seed, dict of arrays)` for every seed, `jobs` processes at a time.
-    Each finished seed is saved to `cache`/seed_XXX.npz at once, so an interrupted ensemble can be
-    continued with resume=True (only valid if the configuration is unchanged)."""
     os.makedirs(cache, exist_ok=True)
     path = lambda s: os.path.join(cache, f"seed_{s:03d}.npz")
     res, todo = {}, []
@@ -155,7 +144,6 @@ def stack(res, key):
 
 
 def band(a):
-    """Median and 2.5 / 97.5 percentiles over instances (axis 0); inf = not finite / not reached."""
     a = np.asarray(a, float)
     with np.errstate(invalid="ignore"):
         lo, med, hi = np.nanpercentile(a, [2.5, 50, 97.5], axis=0, method="nearest")
@@ -183,17 +171,14 @@ def _boot(x, stat, B=2000):
 
 
 def boot_mean(x):
-    """Mean with a 95% percentile-bootstrap CI of the mean (2000 resamples)."""
     return _boot(x, np.mean)
 
 
 def boot_median(x):
-    """Median with a 95% bootstrap CI of the median; right-censored values enter as +inf."""
     return _boot(x, lambda a, axis=None: np.percentile(a, 50, axis=axis, method="lower"))
 
 
 def wilson(k, n, z=1.959964):
-    """Wilson 95% interval for a proportion k/n."""
     if n == 0:
         return np.nan, np.nan
     p = k / n
@@ -208,6 +193,5 @@ def ci(t, f="{:.3g}"):
 
 
 def first_idx(mask):
-    """Index of the first True along the last axis, or -1."""
     mask = np.asarray(mask)
     return np.where(mask.any(-1), mask.argmax(-1), -1)

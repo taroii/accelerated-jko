@@ -1,10 +1,3 @@
-"""E5 — step-size sweep: is the end-to-end gain of E3 still there when gamma is chosen to minimise
-the total work? E5a: inner iterations of one proximal step against gamma (the 50 instances of E2).
-E5b: total inner iterations to a normalised outer gap against gamma, accelerated vs non-accelerated,
-for several inner budgets (the 20 targets of E3 and the quartic target).
-Writes results/e5/{e5a_raw.npz, e5b_raw.npz, tab_e5a.tex, tab_e5b.tex, fig_e5a.*, fig_e5.*,
-fig_e5_budgets.*, e5_summary.txt}. Stages run in the order of the spec and the outputs are rewritten
-after each one, so partial results can be read while later stages run."""
 import argparse
 import os
 import time
@@ -12,26 +5,23 @@ import time
 import numpy as np
 
 from common import RESULTS, boot_median, outdir, plt, run_seeds, savefig, say, stack
-from e2_inner_solver import THETA, random_field, random_gauss, reference
-from e3_end_to_end import GAMMA_REF, load_r_best, make_target
+from inner_solver import THETA, random_field, random_gauss, reference
+from end_to_end import GAMMA_REF, load_r_best, make_target
 from grid import Grid
 from paper_figures import ACC, BASE, DARK, FULL, bold
 from pdhg import ProxProblem, pdhg, run_outer
 
 GAMMAS = (5e-4, 2e-3, 5e-3, 1e-2, 2e-2, 5e-2, 1e-1, 2e-1)
 BUDGETS = (10, 25, 50, 100)
-B_MAIN = 50                    # the inner budget of E3 and of the paper
-TOL_A = (1e-4, 1e-6, 1e-8)     # relative gap of one proximal step (E5a)
-TOL_B = (1e-2, 1e-4, 1e-6)     # normalised outer gap (E5b)
+B_MAIN = 50
+TOL_A = (1e-4, 1e-6, 1e-8)
+TOL_B = (1e-2, 1e-4, 1e-6)
 SCHEMES = (("accel", "accelerated", True), ("mm", "non-accelerated", False))
-REF_CERT = 1e-9                # E5a: relative certificate at which a reference run for J* counts as converged
+REF_CERT = 1e-9
 STOP = ("reached 1e-6", "inner-iteration budget", "stalled", "T_max")
 
 
-#  ------------------------------------------------------------------ E5a: one proximal step against gamma
 def work_a(job):
-    """One E2 instance (same seed, same q and Y), every gamma: iterations to a relative gap with the
-    fixed steps (1, r) and with the balanced steps of eq. (15) computed from the reference solution."""
     seed, a = job
     rng = np.random.default_rng([2, seed])
     grid = Grid(a["n"])
@@ -48,8 +38,6 @@ def work_a(job):
         J0 = prob.values(grid.K1c(z), grid.K2c(z))[1]
         balanced = lambda rf: (np.sqrt(THETA) * np.linalg.norm(rf["state"]["Lam"]) / np.linalg.norm(grid.K1c(rf["last"]["c"])),
                                np.sqrt(THETA) * np.linalg.norm(rf["state"]["mu"]) / np.linalg.norm(grid.K2c(rf["last"]["c"])))
-        # reference as in E2 (ratio 10); at small gamma that run is not converged in ref_iters, so further
-        # reference runs follow (the steps of the experiment, then balanced steps) until the certificate is small
         Jref, ref = reference(prob, a["ref_iters"])
         n_ref = 1
         for steps in ((1.0, a["r"]), None):
@@ -64,8 +52,6 @@ def work_a(job):
         runs = {key: pdhg(prob, s[0], s[1], a["iters"], theta=THETA, record=True, cert_every=None)
                 for key, s in (("fixed", (1.0, a["r"])), ("bal", bal))}
         Jstar = min([Jref] + [r["J"].min() for r in runs.values()])
-        # J* is known only up to the reference's certificate and to how far a measured run went below it:
-        # a tolerance finer than that is undetermined for this instance (NaN), not reached or censored
         out["ref_cert"][i] = ref["cert"] / ((J0 - Jstar) * prob.h2)
         out["ref_shift"][i] = (Jref - Jstar) / (J0 - Jstar)
         out["ref_runs"][i] = n_ref
@@ -79,15 +65,13 @@ def work_a(job):
                 if hit.size:
                     out[f"its_{key}"][i, j] = hit[0] + 1
             adm = np.isfinite(r["J"])
-            out[f"inadm_{key}"][i] = (~adm[adm.argmax():]).sum() if adm.any() else adm.size   # after the first admissible one
+            out[f"inadm_{key}"][i] = (~adm[adm.argmax():]).sum() if adm.any() else adm.size
         out["sig_bal"][i] = bal
         out["wall"][i] = time.perf_counter() - t0
     return seed, out
 
 
-#  ------------------------------------------------------------------ E5b: total work against gamma
 def sweep(tgt, Gstar, a, b, name):
-    """Both outer schemes at every gamma with `b` inner iterations per step, on one target."""
     grid = Grid(a["n"])
     sig = (1.0, a["r"])
     ng, T = len(a["gammas"]), a["T_max"]
@@ -126,7 +110,6 @@ def sweep(tgt, Gstar, a, b, name):
 
 
 def ref_Gstar(tgt, a, name):
-    """G* as in E3: the smallest value over non-accelerated steps with gamma = 0.05 at a constant certificate."""
     say(f"E5b [{name}]: no saved G*, reference run of {a['ref_steps']} steps")
     ref = run_outer(Grid(a["n"]), tgt, GAMMA_REF, a["ref_steps"], False, (1.0, a["r"]), tol_const=a["ref_tol"], cap=a["ref_cap"])
     return float(ref["G"].min())
@@ -134,22 +117,21 @@ def ref_Gstar(tgt, a, name):
 
 def work_gauss(job):
     seed, a = job
-    tgt = random_gauss(np.random.default_rng([3, seed]))          # the targets of the E3 ensemble
+    tgt = random_gauss(np.random.default_rng([3, seed]))
     Gs = a["Gstar"][seed] if a["Gstar"] is not None else ref_Gstar(tgt, a, f"seed {seed}")
     out = sweep(tgt, float(Gs), a, a["b"], f"seed {seed}")
-    out["lam"] = float(1.0 / tgt.s2.max())                         # strong-convexity modulus of V
+    out["lam"] = float(1.0 / tgt.s2.max())
     return seed, out
 
 
 def work_quartic(job):
-    b, a = job                                                     # the "seed" is the inner budget
+    b, a = job
     tgt = make_target("quartic")
     Gs = a["Gstar_q"] if a["Gstar_q"] is not None else ref_Gstar(tgt, a, "quartic")
     return b, sweep(tgt, float(Gs), a, b, "quartic")
 
 
 def saved_Gstar(args):
-    """G* of E3 for the same targets (same grid); None if E3 has not been run at this resolution."""
     fe, fc = (os.path.join(RESULTS, "e3", f) for f in ("e3_ensemble.npz", "e3.npz"))
     if args.n != 64 or not (os.path.exists(fe) and os.path.exists(fc)):
         return None, None
@@ -157,11 +139,9 @@ def saved_Gstar(args):
     return (g if len(g) >= args.seeds_b else None), float(np.load(fc)["quartic_Gstar"])
 
 
-#  ------------------------------------------------------------------ reporting
 def med_ci(x, cap, tex):
-    """Median [95% bootstrap CI] of iteration counts with inf = censored, and the number reached."""
     x = np.asarray(x, float)
-    x = x[~np.isnan(x)]                                            # undetermined instances (E5a) are left out
+    x = x[~np.isnan(x)]
     k, n = int(np.isfinite(x).sum()), x.size
     if n == 0:
         return "n/a", np.nan
@@ -227,12 +207,10 @@ def report_a(d, res, args, r):
 
 
 def costs(res, b):
-    """Total inner iterations to each tolerance, shape (targets, gamma, scheme, tol); inf = not reached."""
     return stack(res, "hit_steps") * b
 
 
 def paired(c_mm, c_acc):
-    """Median [95% CI] of log10(cost non-accelerated / cost accelerated) over targets where both are finite."""
     ok = np.isfinite(c_mm) & np.isfinite(c_acc)
     if not ok.any():
         return "no target reached by both schemes", ok.sum()
@@ -241,7 +219,6 @@ def paired(c_mm, c_acc):
 
 
 def report_b(d, gauss, quartic, args):
-    """gauss: {b: list of per-target dicts}; quartic: {b: dict}. Either may be partial."""
     gam = np.array(GAMMAS)
     cap = args.budget
     txt = [f"\n\nE5b — total inner iterations to a normalised outer gap against gamma. n = {args.n}, at most {args.T_max} outer steps, "
@@ -259,7 +236,6 @@ def report_b(d, gauss, quartic, args):
     np.savez_compressed(os.path.join(d, "e5b_raw.npz"), gammas=gam, tol=np.array(TOL_B), **raw)
 
     fmt = lambda v: "censored" if np.isinf(v) else f"{v:.0f}"
-    # --- per gamma at the main budget
     if B_MAIN in gauss:
         res = gauss[B_MAIN]
         n = len(res)
@@ -280,13 +256,12 @@ def report_b(d, gauss, quartic, args):
             txt.append(f"  gamma = {g:<7g} " + "; ".join(f"{STOP[c]}: {int((stop[:, i, 0] == c).sum())} / {int((stop[:, i, 1] == c).sum())}"
                                                           for c in range(4)) + f"; inadmissible steps {int(fails[:, i, 0].sum())} / {int(fails[:, i, 1].sum())}\n")
         txt.append(f"\n  wall-clock per run: median {np.median(stack(res, 'wall')):.0f} s, total {stack(res, 'wall').sum() / 3600:.1f} CPU-hours\n")
-    # --- best over gamma (and over the budget)
     txt.append("\nBest cost per target: min over gamma of total inner iterations; paired log10(non-accelerated / accelerated), "
                "median [95% bootstrap CI] (positive = acceleration needs less work)\n")
     best_rows = {}
     for k in (1, 2):
         if B_MAIN in gauss:
-            C = costs(gauss[B_MAIN], B_MAIN)[..., k].min(1)                      # (targets, scheme)
+            C = costs(gauss[B_MAIN], B_MAIN)[..., k].min(1)
             best_rows[k] = C
             arg = costs(gauss[B_MAIN], B_MAIN)[..., k].argmin(1)
             txt.append(f"  to {TOL_B[k]:g}, b = {B_MAIN} only, Gaussian targets: {paired(C[:, 1], C[:, 0])[0]}\n"
@@ -314,7 +289,6 @@ def report_b(d, gauss, quartic, args):
                 txt.append(f"  {g:<9g} " + "".join(f"{fmt(o['hit_steps'][i, 0, k] * b)} / {fmt(o['hit_steps'][i, 1, k] * b)}".ljust(22) for k in (1, 2))
                            + f"{STOP[int(o['stop'][i, 0])]} / {STOP[int(o['stop'][i, 1])]}, {int(o['fails'][i, 0])} / {int(o['fails'][i, 1])}\n")
 
-    # --- table: rows gamma, b = B_MAIN
     if B_MAIN in gauss:
         C = costs(gauss[B_MAIN], B_MAIN)
         Q = quartic[B_MAIN]["hit_steps"] * B_MAIN if B_MAIN in quartic else None
@@ -348,12 +322,10 @@ def report_b(d, gauss, quartic, args):
         with open(os.path.join(d, "tab_e5b.tex"), "w", encoding="utf-8") as f:
             f.write("\n".join(tex) + "\n")
 
-    # --- figure: cost against gamma at the main budget
     def curves(ax, cost, band):
-        """cost: (targets, gamma, scheme, tol)."""
         for j, (col, lab) in enumerate(((ACC, "accelerated (Alg. 1)"), (BASE, "non-accelerated"))):
             for k, ls in ((1, "-"), (2, "--")):
-                cen = np.isinf(np.median(cost[:, :, j, k], axis=0))          # fewer than half of the targets reached it
+                cen = np.isinf(np.median(cost[:, :, j, k], axis=0))
                 x = np.minimum(cost[:, :, j, k], cap)
                 lo, med, hi = np.percentile(x, [2.5, 50, 97.5], axis=0)
                 med = np.where(cen, cap, med)
@@ -424,7 +396,6 @@ def main():
     txt_a, gauss, quartic = [], {}, {}
 
     def load(sub, seeds):
-        """Per-seed files of an earlier stage or run, if all are there."""
         paths = [os.path.join(d, sub, f"seed_{s:03d}.npz") for s in seeds]
         if not all(os.path.exists(p) for p in paths):
             return None

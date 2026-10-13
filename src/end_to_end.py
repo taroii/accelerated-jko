@@ -1,7 +1,3 @@
-"""E3 — end to end: Algorithm 1 with every proximal step solved by Algorithm 2, certified
-schedule eps_t = eps0 (t+1)^-4.5 vs a fixed inner budget, accelerated vs non-accelerated, at a
-small step size gamma (many outer steps are needed, which is where acceleration pays).
-Writes results/e3/{e3.npz, fig_e3.*, results.md}. No arguments needed (run E2 first for r_best)."""
 import argparse
 import json
 import os
@@ -10,14 +6,14 @@ import numpy as np
 
 from common import (COLORS, FLOOR, RESULTS, add_references, band, boot_mean, boot_median, ci, first_idx, floor,
                     md_table, outdir, plot_band, plt, pool, run_seeds, savefig, say, stack, theorem_bound)
-from e2_inner_solver import random_gauss
+from inner_solver import random_gauss
 from grid import Gauss, Grid, Quartic
 from pdhg import run_outer
 
-GAMMA = 5e-4        # small step: gamma * (curvature of the targets) ~ 0.01-0.05, so hundreds of plain steps are needed
-GAMMA_REF = 0.05    # the reference run for G* uses a large step (the minimiser does not depend on gamma)
+GAMMA = 5e-4
+GAMMA_REF = 0.05
 EPS0 = 1e-2
-STALL = 1e-10       # a certified solve also ends once its iterate has stopped moving (certificate at its floor)
+STALL = 1e-10
 RUNS = [("accel_cert", "accelerated, certified $\\varepsilon_t$", dict(accel=True)),
         ("mm_cert", "non-accelerated, certified $\\varepsilon_t$", dict(accel=False)),
         ("accel_fixed", "accelerated, 50 inner its", dict(accel=True, fixed=50)),
@@ -37,12 +33,10 @@ def make_target(name):
 
 
 def run_instance(tgt, a, name):
-    """Reference run and the four runs of E3 on one target."""
     grid = Grid(a["n"])
     sig = (1.0, a["r"])
     out = {}
     say(f"E3 [{name}]: reference run, {a['ref_steps']} minimizing-movement steps")
-    # reference: fixed-reference minimizing movement at a constant certificate
     ref = run_outer(grid, tgt, GAMMA_REF, a["ref_steps"], False, sig, tol_const=a["ref_tol"], cap=a["ref_cap"])
     out["ref_G"] = ref["G"]
     out["ref_inner"] = ref["inner"]
@@ -70,7 +64,6 @@ def work(job):
 
 
 def canonical(args):
-    """The two fixed targets of the spec."""
     r_best, found = load_r_best()
     a = dict(n=args.n, T=args.T, cap=args.cap, ref_steps=args.ref_steps, ref_tol=args.ref_tol, ref_cap=args.ref_cap,
              r=r_best)
@@ -135,7 +128,6 @@ def canonical(args):
     return lines
 
 
-#  ------------------------------------------------------------------ ensemble over random instances
 GFLOOR = 1e-13
 REL = (1e-2, 1e-4, 1e-6)
 TT = (20, 50, 100, 300)

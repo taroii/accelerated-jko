@@ -1,6 +1,3 @@
-"""E2 — the inner solver: one restricted proximal step, scalar-step Chambolle–Pock vs the
-two-channel spectrally preconditioned PDHG, channel-ratio sweep, balanced steps, and n-scaling.
-Writes results/e2/{e2.npz, fig_e2.pdf/png, results.md, r_best.json}. No arguments needed."""
 import argparse
 import json
 import os
@@ -23,7 +20,6 @@ def targets():
 
 
 def field_Y(g):
-    """Y = x + 0.08 grad( sin(2 pi x) cos(4 pi y) + 0.5 cos(2 pi y) ), gradient computed analytically."""
     x, y = g.X[..., 0], g.X[..., 1]
     gx = 2 * np.pi * np.cos(2 * np.pi * x) * np.cos(4 * np.pi * y)
     gy = -4 * np.pi * np.sin(2 * np.pi * x) * np.sin(4 * np.pi * y) - np.pi * np.sin(2 * np.pi * y)
@@ -31,7 +27,6 @@ def field_Y(g):
 
 
 def reference(prob, n_ref):
-    """J* = min J over a long preconditioned run with ratio 10; also the converged primal and duals."""
     ref = pdhg(prob, 1.0, 10.0, n_ref, theta=THETA, record=True)
     return ref["J"].min(), ref
 
@@ -54,7 +49,6 @@ def summarize(run, Jstar, h2):
 
 
 def canonical(args):
-    """The fixed instance of the spec; fixes r_best."""
     d = outdir("e2")
     grid = Grid(args.n)
     data, lines, R = {}, [], {}
@@ -87,7 +81,6 @@ def canonical(args):
         data[f"{tgt.name}_psi_star"] = grid.synth(psi_c)
         data[f"{tgt.name}_ref_final_cert"] = np.array([ref["cert_spec"], ref["cert"]])
 
-    # r_best = argmin iterations-to-1e-6 over the ratio sweep (summed over the two targets)
     def score(r):
         its = [R[t.name][f"precond r={r:g}"]["its"][2] for t in targets()]
         return np.inf if any(i is None for i in its) else sum(its)
@@ -95,7 +88,6 @@ def canonical(args):
     with open(os.path.join(d, "r_best.json"), "w", encoding="utf-8") as f:
         json.dump({"r_best": r_best, "sig_L": 1.0, "sig_m": r_best}, f)
 
-    # n-scaling run with the best ratio
     gbig = Grid(args.n_big)
     for tgt in targets():
         prob = ProxProblem(gbig, tgt, GAMMA, field_Y(gbig))
@@ -105,7 +97,6 @@ def canonical(args):
         R[tgt.name][f"n={args.n_big}, r={r_best:g}"] = summarize(run, Jstar, prob.h2)
         print(f"[{tgt.name}] n={args.n_big} r={r_best:g}: {R[tgt.name][f'n={args.n_big}, r={r_best:g}']['its']}", flush=True)
 
-    #  -- results.md and npz
     for tgt in targets():
         lines.append(f"\n## Target: {tgt.name}\n\nIterations to gap < threshold (None = not reached in {args.iters}):\n")
         rows = [[name, f"{s['sig'][0]:.4g}", f"{s['sig'][1]:.4g}"] + s["its"] + [float(max(s["gap"][-1], 0.0)), f"{s['time']:.1f}"]
@@ -136,7 +127,6 @@ def canonical(args):
                  "All stopping rules (E3, E4) use this projected certificate; both are recorded here.\n")
     np.savez_compressed(os.path.join(d, "e2.npz"), r_best=r_best, **data)
 
-    #  -- figure
     fig, axes = plt.subplots(2, 2, figsize=(9.5, 6.4))
     for row, tgt in enumerate(targets()):
         ax = axes[row, 0]
@@ -169,7 +159,6 @@ def canonical(args):
     return lines
 
 
-#  ------------------------------------------------------------------ ensemble over random instances
 CONFIGS = [("scalar", "scalar-step PDHG", dict(scalar=True, s=(None, None)))] + \
           [(f"r{r:g}", rf"preconditioned, $\sigma_\mu/\sigma_\Lambda={r:g}$", dict(s=(1.0, r))) for r in RATIOS] + \
           [("s0.1_1", "preconditioned (0.1, 1)", dict(s=(0.1, 1.0))), ("s10_100", "preconditioned (10, 100)", dict(s=(10.0, 100.0))),
@@ -177,8 +166,6 @@ CONFIGS = [("scalar", "scalar-step PDHG", dict(scalar=True, s=(None, None)))] + 
 
 
 def random_field(g, rng, K=6, amp=0.08):
-    """Y = x + amp (grad phi + curl chi): phi, chi random cosine series with coefficients N(0,1)/|k|^3,
-    |k|_inf <= K, each scaled to unit sup norm on the grid. The curl part makes Y a non-gradient field."""
     k = np.arange(K + 1)
     kn = np.sqrt(k[:, None] ** 2 + k[None, :] ** 2)
     kn[0, 0] = np.inf
@@ -198,7 +185,6 @@ def random_field(g, rng, K=6, amp=0.08):
 
 
 def random_gauss(rng):
-    """Centre m ~ U([0.35, 0.65]^2), variances log-uniform on [0.01, 0.06]."""
     m = rng.uniform(0.35, 0.65, 2)
     var = np.exp(rng.uniform(np.log(0.01), np.log(0.06), 2))
     return Gauss(m, np.sqrt(var))
@@ -219,7 +205,7 @@ def ens_work(job):
     for key, _, kw in CONFIGS:
         s = kw.get("s", bal)
         run = pdhg(prob, s[0], s[1], a["iters"], theta=THETA, scalar=kw.get("scalar", False), record=True)
-        rel = (run["J"] - Jstar) / (J0 - Jstar)                       # gap normalised by the initial gap
+        rel = (run["J"] - Jstar) / (J0 - Jstar)
         cs = run["certs"]
         its, ratio = [], []
         for th in THRESH:

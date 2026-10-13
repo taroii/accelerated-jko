@@ -1,9 +1,3 @@
-"""E4 — beyond the theory: a two-component Gaussian mixture target (not log-concave), three
-reference measures, accelerated vs non-accelerated fixed-reference scheme.
-Writes results/e4/{e4.npz, fig_e4_evolution.*, fig_e4_gap.*, results.md}. No arguments needed.
-
-The inner problem is non-convex here: Algorithm 2 is run as is, the pointwise transport solve
-is local (warm-started Newton), and the duality certificate is only a heuristic stopping rule."""
 import argparse
 import json
 import os
@@ -17,7 +11,7 @@ from pdhg import run_outer
 
 GAMMA = 0.05
 EPS0 = 1e-2
-STALL = 1e-10    # an inner solve also ends once its coefficients move less than this (relative) in 25 iterations
+STALL = 1e-10
 SNAP = (0, 5, 10, 20, 40, 80)
 WEIGHTS = (0.5, 0.9)
 INITS = {"A": "uniform", "B": "trunc. N((0.5,0.5), 0.15^2 I)", "C": "trunc. N((0.52,0.5), 0.15^2 I)"}
@@ -58,7 +52,6 @@ def load_r_best():
 
 
 def canonical(args):
-    """The fixed configurations of the spec (2 weights x 3 references x 2 methods)."""
     r_best, found = load_r_best()
     a = dict(n=args.n, T=args.T, cap=args.cap, r=r_best)
     d = outdir("e4")
@@ -109,7 +102,6 @@ def canonical(args):
     fig.tight_layout()
     savefig(fig, d, "fig_e4_gap")
 
-    #  -- evolution for w = 0.9, init C
     snaps = [s for s in SNAP if s <= T]
     fig, axes = plt.subplots(2, len(snaps), figsize=(2.3 * len(snaps), 4.9), squeeze=False)
     vmax = max(np.log10(res[f"w0.9_C_{m}"]["snap_rho"]).max() for m in METHODS)
@@ -136,13 +128,11 @@ def canonical(args):
     return lines
 
 
-#  ------------------------------------------------------------------ ensemble over random instances
 ENS_INITS = {"A": "uniform reference", "C": "trunc. N((0.5 + off, 0.5), 0.15^2 I), off ~ N(0, 0.02^2)"}
 RECOVER = 0.05
 
 
 def ens_work(job):
-    """One seed = one mixture (w, delta) and one asymmetric offset; both references and both methods run on it."""
     seed, a = job
     rng = np.random.default_rng([4, seed])
     w, delta, off = rng.uniform(0.6, 0.95), rng.uniform(0.15, 0.25), rng.normal(0, 0.02)
@@ -174,7 +164,7 @@ def ensemble(args):
     n = len(res)
     w = stack(res, "w")
     keys = [(i, m) for i in ENS_INITS for m in METHODS]
-    Gs = np.min([stack(res, f"{i}_{m}_G").min(axis=1) for i, m in keys], axis=0)[:, None]   # best value seen per instance
+    Gs = np.min([stack(res, f"{i}_{m}_G").min(axis=1) for i, m in keys], axis=0)[:, None]
     gap = {k: np.maximum(stack(res, f"{k[0]}_{k[1]}_G") - Gs, 0.0) for k in keys}
     rel = {k: gap[k] / gap[k][:, :1] for k in keys}
     tt = [k for k in (20, 80) if k <= T]

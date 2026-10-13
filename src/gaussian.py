@@ -1,14 +1,9 @@
-"""Exact Gaussian machinery (spec section 0.4): d = 2, centered Gaussians, maps from the
-reference nu = N(0, Zc) are 2x2 matrices. Restricted proximal step over SPD maps, the JKO
-step, and the four schemes compared in E1."""
 import numpy as np
 from scipy.optimize import least_squares, minimize
 
 I2 = np.eye(2)
 
 
-#  ------------------------------------------------------------------ closed-form 2x2 linear algebra
-# (the hot loops call these millions of times; closed forms are exact to round-off and avoid LAPACK)
 def sym(M):
     return 0.5 * (M + M.T)
 
@@ -32,12 +27,10 @@ def logdet(M):
 
 
 def min_eig(S):
-    """Smallest eigenvalue of a symmetric 2x2 matrix."""
     return 0.5 * (S[0, 0] + S[1, 1]) - np.sqrt(0.25 * (S[0, 0] - S[1, 1]) ** 2 + S[0, 1] ** 2)
 
 
 def sqrtm_spd(S):
-    """Square root of a symmetric positive semidefinite 2x2 matrix: (S + sqrt(det) I)/sqrt(tr + 2 sqrt(det))."""
     S = sym(S)
     r = np.sqrt(max(det2(S), 0.0))
     t = np.sqrt(max(S[0, 0] + S[1, 1] + 2 * r, 0.0))
@@ -47,7 +40,6 @@ def sqrtm_spd(S):
 
 
 def chol(S):
-    """Lower Cholesky factor of an SPD 2x2 matrix."""
     if not (S[0, 0] > 0 and det2(S) > 0):
         raise np.linalg.LinAlgError("matrix not positive definite")
     a = np.sqrt(S[0, 0])
@@ -60,7 +52,6 @@ def fro(M):
 
 
 def solve3(A, b):
-    """3x3 solve by the adjugate (Newton self-corrects the round-off)."""
     c0 = np.cross(A[1], A[2])
     c1 = np.cross(A[2], A[0])
     c2 = np.cross(A[0], A[1])
@@ -71,7 +62,6 @@ def solve3(A, b):
 
 
 def ot_map(A, B):
-    """Optimal map N(0,A) -> N(0,B): T = A^{-1/2} (A^{1/2} B A^{1/2})^{1/2} A^{-1/2}, SPD, T A T = B."""
     r = sqrtm_spd(A)
     ri = inv(r)
     return sym(ri @ sqrtm_spd(r @ B @ r) @ ri)
@@ -83,13 +73,11 @@ def w2sq(A, B):
 
 
 def kl(S, Q):
-    """KL(N(0,S) | N(0,Q))."""
     M = inv(Q) @ S
     return float(0.5 * (np.trace(M) - 2 - logdet(M)))
 
 
 def norm2_nu(M, Zc):
-    """||M||^2_nu = tr(M Zc M^T)."""
     return float(np.trace(M @ Zc @ M.T))
 
 
@@ -103,7 +91,6 @@ def _spd_to_chol(S):
     return np.array([np.log(L[0, 0]), L[1, 0], np.log(L[1, 1])])
 
 
-#  ------------------------------------------------------------------ restricted prox
 def _prox_obj(S, Y, gamma, Zc, Qi):
     D = S - Y
     return 0.5 * (np.trace(Qi @ S @ Zc @ S) - 2 - logdet(Qi) - 2 * logdet(S) - logdet(Zc)) \
@@ -111,15 +98,10 @@ def _prox_obj(S, Y, gamma, Zc, Qi):
 
 
 def prox_kkt(S, Y, gamma, Zc, Qi):
-    """Gradient of the proximal objective w.r.t. S, projected onto symmetric matrices."""
     return sym(0.5 * (Qi @ S @ Zc + Zc @ S @ Qi) - inv(S) + (S - Y) @ Zc / gamma)
 
 
 def restricted_prox(Y, gamma, Zc, Q, S_init):
-    """argmin over SPD S of KL(S Zc S | Q) + tr((S-Y) Zc (S-Y)^T)/(2 gamma), to machine precision.
-
-    BFGS on the Cholesky parameters (analytic gradient) from the warm start, a Nelder–Mead polish
-    as in the spec, then Newton on the 3x3 KKT system. Returns (S, ||KKT||_F)."""
     Qi = inv(Q)
 
     def fg(p):
@@ -131,7 +113,6 @@ def restricted_prox(Y, gamma, Zc, Q, S_init):
     p = minimize(lambda q: fg(q)[0], p, method="Nelder-Mead",
                  options=dict(xatol=1e-13, fatol=1e-15, maxiter=2000)).x
     S = _chol_to_spd(p)[0]
-    # Newton polish on sym-grad(S) = 0 in the coordinates (s11, s12, s22)
     basis = [np.array([[1.0, 0], [0, 0]]), np.array([[0, 1.0], [1.0, 0]]), np.array([[0, 0], [0, 1.0]])]
     vec = lambda M: np.array([M[0, 0], M[0, 1], M[1, 1]])
     res = fro(prox_kkt(S, Y, gamma, Zc, Qi))
@@ -155,10 +136,7 @@ def restricted_prox(Y, gamma, Zc, Q, S_init):
     return sym(S), float(res)
 
 
-#  ------------------------------------------------------------------ JKO step
 def jko_step(Sy, gamma, Q):
-    """argmin_S KL(S|Q) + W2^2(S, Sy)/(2 gamma): solve M S M = Sy with M = I + gamma (Q^{-1} - S^{-1}) SPD.
-    Returns (S, residual)."""
     Qi = inv(Q)
 
     def resid(p):
@@ -181,18 +159,14 @@ def jko_step(Sy, gamma, Q):
     raise RuntimeError(f"JKO step not solved (best residual {best[1]:.2e})")
 
 
-#  ------------------------------------------------------------------ the four schemes of E1
 _FAIL = (RuntimeError, np.linalg.LinAlgError, ValueError, FloatingPointError)
 
 
 def _pad(vals, T):
-    """A failed solve ends the run: the remaining steps are NaN."""
     return np.array(list(vals) + [np.nan] * (T + 1 - len(vals)))
 
 
 def run_fixed_reference(Zc, Q, gamma, T, accel):
-    """Algorithm 1 (accel) or the fixed-reference minimizing movement, exact restricted prox.
-    Returns gap_t, ||Z_t - P||_nu for t = 0..T, and the largest KKT residual."""
     P = ot_map(Zc, Q)
     X = I2.copy()
     Z = I2.copy()
@@ -215,7 +189,6 @@ def run_fixed_reference(Zc, Q, gamma, T, accel):
 
 
 def run_moving_reference(Zc, Q, gamma, T):
-    """Moving-reference scheme (paper eq. (16)): a genuine JKO step from the extrapolated measure."""
     Zt = Zc.copy()
     Sx = Zc.copy()
     gap = [kl(Sx, Q)]
@@ -238,7 +211,6 @@ def run_moving_reference(Zc, Q, gamma, T):
 
 
 def run_jko(Zc, Q, gamma, T):
-    """Plain JKO: x_{t+1} = JKO(x_t)."""
     Sx = Zc.copy()
     gap = [kl(Sx, Q)]
     res = 0.0

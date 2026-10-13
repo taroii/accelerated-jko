@@ -1,11 +1,3 @@
-"""Inner solver (spec section 0.6, Algorithm 2 of the paper): two-channel spectrally
-preconditioned PDHG for one restricted proximal step on the grid, the duality certificate,
-and the outer scheme (Algorithm 1) driven by it.
-
-Units. Cell weights are stored as wt = nu(x_cell)/mean(nu) (wt = 1 for the uniform reference),
-i.e. the spec's w(x) = nu(x) h^2 with the factor h^2 dropped. `J` and the dual objects are sums
-over cells in these units; everything returned as a reported value (G, certificate, tolerances)
-is multiplied by h^2."""
 import time
 
 import numpy as np
@@ -14,7 +6,6 @@ from grid import SQ2, admissible, hess_parts
 
 
 class ProxProblem:
-    """min_psi J(psi) = sum wt [ -log det(I + Hess psi) + V(x + grad psi) + |x + grad psi - Y|^2/(2 gamma) ]."""
 
     def __init__(self, grid, target, gamma, Y, wt=None):
         self.grid = grid
@@ -23,11 +14,9 @@ class ProxProblem:
         self.Y = Y
         self.wt = np.ones((grid.n, grid.n)) if wt is None else wt
         self.h2 = grid.h ** 2
-        # constant sum w log nu of the reference entropy (0 for the uniform reference)
         self.ent0 = float((self.wt * np.log(self.wt)).sum()) * self.h2
 
     def values(self, H, g):
-        """(admissible, J, G) with J in internal units and G = KL(S#nu | q) in reported units."""
         U = self.grid.X + g
         if not admissible(H, U):
             return False, np.inf, np.inf
@@ -38,7 +27,6 @@ class ProxProblem:
 
 
 def prox_h1(M, tw):
-    """prox_{t h1}(M), h1(H) = w (-log det(I+H)), tw = t w: minimiser of -tw log det(I+P) + |P-M|_F^2/2."""
     A = M[..., 0]
     Bm = M[..., 1] / SQ2
     C = M[..., 2]
@@ -54,7 +42,6 @@ def prox_h1(M, tw):
 
 
 def h1_conj(Lam, wt):
-    """h1*(Lam) = sum wt f*(Lam/wt), f*(L) = -tr L - 2 - log det(-L) for L negative definite."""
     a = Lam[..., 0] / wt
     b = Lam[..., 1] / (SQ2 * wt)
     c = Lam[..., 2] / wt
@@ -65,13 +52,6 @@ def h1_conj(Lam, wt):
 
 
 def certificate(prob, J_adm, Lam, mu, R=1.0):
-    """Duality certificates for an admissible psi with objective J_adm (reported units).
-
-    Both use the lower bound J* >= -h1*(Lam) - h2*(mu) - R ||v||_1 from weak duality with
-    K1 = B K2 and |grad psi| <= R. `spec` takes v = r := B^T Lam + mu (Remark 4 as written);
-    `proj` takes v = P r, the projection of r onto gradient fields, which is equally valid
-    because <K2 psi, r> = <K2 psi, P r>, and is the one that vanishes at a saddle point
-    (there K2^T r = 0, but r itself need not be zero)."""
     g = prob.grid
     r = g.BT(Lam) + mu
     dual = -h1_conj(Lam, prob.wt) - float(
@@ -88,13 +68,6 @@ def new_state(grid):
 
 def pdhg(prob, sig_L, sig_m, max_iter, theta=0.99, scalar=False, state=None, tol=None,
          cert_every=25, cert_kind="proj", record=False, stall=None):
-    """Run Algorithm 2 for at most `max_iter` iterations from `state` (warm start; zeros if None).
-
-    scalar=True is the Chambolle–Pock baseline T = tau I with tau = sigma = sqrt(theta)/||K||.
-    Stops early when the certificate (checked every `cert_every` iterations) is <= tol, or, with
-    `stall` set, when the coefficients moved by less than `stall` (relative) since the last check.
-    Returns the last admissible iterate: its coefficients `c`, fields `H`, `g`, values `J`, `G`.
-    With record=True also the per-iteration J (inf where inadmissible) and all certificates."""
     grid, tgt, wt = prob.grid, prob.target, prob.wt
     wt2 = wt[..., None]
     if scalar:
@@ -118,14 +91,11 @@ def pdhg(prob, sig_L, sig_m, max_iter, theta=0.99, scalar=False, state=None, tol
     t0 = time.perf_counter()
     k = 0
     for k in range(1, max_iter + 1):
-        # entropy channel: Lam <- prox_{sig_L h1*}(Lam + sig_L K1 psib)
         v = Lam + sig_L * Hb
         Lam = v - sig_L * prox_h1(v / sig_L, wt2[..., 0] / sig_L)
-        # transport channel: mu <- prox_{sig_m h2*}(mu + sig_m K2 psib)
         v = mu + sig_m * gb
         u = tgt.solve(wt2 / sig_m, 1.0, grid.X + v / sig_m, 0.0, prob.Y, prob.gamma, u0=u)
         mu = v - sig_m * (u - grid.X)
-        # primal: psi <- psi - T (K1^T Lam + K2^T mu), mean removed (Tk = 0 on constants)
         c = c - Tk * (grid.K1T_c(Lam) + grid.K2T_c(mu))
         Hn, gn = grid.K1c(c), grid.K2c(c)
         Hb, gb = 2 * Hn - H, 2 * gn - g
@@ -157,12 +127,6 @@ def pdhg(prob, sig_L, sig_m, max_iter, theta=0.99, scalar=False, state=None, tol
 
 def run_outer(grid, target, gamma, T, accel, sig, wt=None, eps0=None, cap=5000, fixed=None,
               tol_const=None, snapshots=(), log=None, stall=None, stop=None):
-    """Algorithm 1 on the grid with X_0 = Z_0 = Id; alpha_t = 2/(t+2) (accel) or 1 (minimizing movement).
-
-    Inner accuracy: `fixed` iterations per step, or the certified schedule eps_t = eps0 (t+1)^-4.5
-    (or the constant `tol_const`), capped at `cap` inner iterations. Duals and psi are warm-started.
-    `stall` also ends an inner solve once its iterate has stopped moving (see `pdhg`).
-    `stop(G, inner)`, called after every step with the values so far, ends the run early when true."""
     X = grid.X.copy()
     Z = grid.X.copy()
     state = new_state(grid)
@@ -185,7 +149,7 @@ def run_outer(grid, target, gamma, T, accel, sig, wt=None, eps0=None, cap=5000, 
             tol = tol_const if tol_const is not None else eps0 * (t + 1) ** -4.5
             res = pdhg(prob, sig[0], sig[1], cap, state=state, tol=tol, stall=stall)
         state = res["state"]
-        if res["last"] is None:          # no admissible iterate in this solve: keep the previous map
+        if res["last"] is None:
             fails += 1
             X1, Gt = X, G[-1]
         else:

@@ -1,6 +1,3 @@
-"""Unit tests required by the spec before any experiment is run: transforms, adjoints,
-multipliers, proxes, conjugates, weak duality, and the exact Gaussian machinery.
-Run `python src/test_units.py` (exit code 1 on any failure); the functions are also pytest-compatible."""
 import sys
 
 import numpy as np
@@ -22,7 +19,6 @@ def _rel(a, b):
     return float(np.abs(a - b).max() / max(np.abs(b).max(), 1e-300))
 
 
-#  ------------------------------------------------------------------ transforms / operators
 def test_derivatives_analytic():
     for n in (16, 64):
         g = Grid(n)
@@ -66,7 +62,6 @@ def test_K1_equals_B_K2():
     check("K2^T (r - P r) = 0", np.abs(g.K2T(r - P)).max() / np.abs(g.K2T(r)).max(), 1e-10)
 
 
-#  ------------------------------------------------------------------ proxes
 def _mat(v):
     return np.array([[v[0], v[1] / SQ2], [v[1] / SQ2, v[2]]])
 
@@ -82,7 +77,7 @@ def test_entropy_prox():
         assert np.linalg.eigvalsh(np.eye(2) + Pm).min() > 0
         worst_kkt = max(worst_kkt, np.abs(Pm - _mat(m) - t * np.linalg.inv(np.eye(2) + Pm)).max())
         f0 = obj(p, m, t)
-        for _ in range(20):                     # finite-difference test: no nearby point is better
+        for _ in range(20):
             f1 = obj(p + 1e-4 * RNG.normal(size=3), m, t)
             worst_fd = max(worst_fd, f0 - f1)
     check("entropy prox: stationarity P - M - tw (I+P)^-1 = 0", worst_kkt, 1e-10)
@@ -99,7 +94,6 @@ def test_transport_prox():
     gamma = 0.05
     Y = g.X + 0.1 * RNG.normal(size=g.X.shape)
     for tgt in _targets():
-        # t = 2e-4 keeps the mixture subproblem convex (Hess V >= -2809), so the local solve is global
         for t in (2e-4,) if not tgt.convex else (2e-4, 0.1, 3.0):
             tw = t * np.exp(0.3 * RNG.normal(size=(16, 16, 1)))
             a = g.X + 0.3 * RNG.normal(size=g.X.shape)
@@ -130,13 +124,13 @@ def test_conjugates():
         gs = tgt.conj(ut, g.X, Y, gamma)
         gfun = lambda z: tgt.V(z) + ((z - Y) ** 2).sum(-1) / (2 * gamma)
         worst = -np.inf
-        for _ in range(200):                    # Fenchel–Young: g*(u) >= <m,u> - g(m) for all feasible m
+        for _ in range(200):
             z = RNG.uniform(size=g.X.shape)
             worst = max(worst, (((z - g.X) * ut).sum(-1) - gfun(z) - gs).max())
         check(f"Fenchel-Young for g* ({tgt.name})", worst, 1e-10)
     wt = np.exp(RNG.normal(size=(8, 8)))
     P0 = 0.5 * RNG.normal(size=(8, 8, 3))
-    L = -wt[..., None] * prox_h1(P0, 1.0) - wt[..., None] * np.array([1.0, 0.0, 1.0])   # negative definite
+    L = -wt[..., None] * prox_h1(P0, 1.0) - wt[..., None] * np.array([1.0, 0.0, 1.0])
     hs = h1_conj(L, wt)
     worst = -np.inf
     for _ in range(200):
@@ -146,7 +140,6 @@ def test_conjugates():
             continue
         worst = max(worst, (Hh * L).sum() - (wt * -np.log(det)).sum() - hs)
     check("Fenchel-Young for h1*", worst, 1e-10)
-    # equality at the maximiser I + H = -(L/w)^-1
     a, b, c = L[..., 0] / wt, L[..., 1] / (SQ2 * wt), L[..., 2] / wt
     det = a * c - b * b
     Hs = np.stack([-c / det - 1, SQ2 * b / det, -a / det - 1], -1)
@@ -159,12 +152,11 @@ def test_moreau_entropy_dual_in_domain():
     wt = np.exp(RNG.normal(size=100))
     Ln = L - s * prox_h1(L / s, wt / s)
     assert np.isfinite(h1_conj(Ln, wt))
-    P = prox_h1(L / s, wt / s)                  # Lam = grad h1(P) = -w (I+P)^-1
+    P = prox_h1(L / s, wt / s)
     worst = max(np.abs(_mat(l) + w * np.linalg.inv(np.eye(2) + _mat(p))).max() for l, p, w in zip(Ln, P, wt))
     check("Moreau: prox_{s h1*}(L) = grad h1(prox_{h1/s}(L/s))", worst, 1e-10)
 
 
-#  ------------------------------------------------------------------ inner solver
 def _e2_field(g):
     x, y = g.X[..., 0], g.X[..., 1]
     gx = 2 * np.pi * np.cos(2 * np.pi * x) * np.cos(4 * np.pi * y)
@@ -198,7 +190,6 @@ def test_scalar_baseline_runs():
     assert r["last"] is not None
 
 
-#  ------------------------------------------------------------------ Gaussian machinery
 def _rand_spd():
     M = RNG.normal(size=(2, 2))
     return M @ M.T + 0.2 * np.eye(2)
@@ -215,7 +206,7 @@ def test_gaussian_ot():
     check("W2^2(A,B) = ||T - I||_A^2", worst_w, 1e-10)
     check("KL(S|S) = 0", abs(ga.kl(A, A)), 1e-13)
     worst = 0.0
-    for _ in range(50):                         # closed-form 2x2 helpers against LAPACK
+    for _ in range(50):
         A = _rand_spd()
         M = RNG.normal(size=(2, 2))
         worst = max(worst, np.abs(ga.inv(M) - np.linalg.inv(M)).max() / np.abs(np.linalg.inv(M)).max(),
@@ -253,7 +244,6 @@ def test_gaussian_jko():
         for _ in range(20):
             Sp = S + ga.sym(1e-4 * RNG.normal(size=(2, 2)))
             worst_min = max(worst_min, f0 - ga.kl(Sp, Q) - ga.w2sq(Sp, Sy) / (2 * gam))
-        # closed form for Q = I
         S1, _ = ga.jko_step(Sy, gam, np.eye(2))
         w, V = np.linalg.eigh(Sy)
         u = (np.sqrt(w) + np.sqrt(w + 4 * gam * (1 + gam))) / (2 * (1 + gam))
@@ -264,7 +254,6 @@ def test_gaussian_jko():
 
 
 def test_gaussian_commuting_case():
-    """With commuting covariances the restricted prox from an SPD Y is the JKO step from Y#nu."""
     Zc, Q, gam = np.diag([2.0, 0.7]), np.diag([1.0, 3.0]), 0.4
     Y = np.diag([1.3, 0.8])
     S, _ = ga.restricted_prox(Y, gam, Zc, Q, np.eye(2))

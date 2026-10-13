@@ -1,16 +1,14 @@
-"""Figures and tables for the paper, built from the saved results of E1-E3 (nothing is re-run).
-Writes results/figures/: fig_main_*.*, fig_app_*.*, tab_*.tex and tables.md. No arguments needed."""
 import os
 
 import numpy as np
 
 from common import RESULTS, boot_median, outdir, plt, savefig, say
-from e1_gaussian_rates import GAMMA, first_step
+from gaussian_rates import GAMMA, first_step
 
 ACC, BASE, GREY, DARK = "#0072B2", "#D55E00", "#8C8C8C", "#222222"
 RATIO_COLS = {"1": "#9ECAE1", "10": "#3182BD", "100": "#08306B"}
-NOISE = 1e-10            # gaps below this are round-off; axes stop here
-FULL = 5.5               # text width of the paper (inches)
+NOISE = 1e-10
+FULL = 5.5
 plt.rcParams.update({"font.size": 8, "axes.titlesize": 8.5, "axes.labelsize": 8, "legend.fontsize": 7,
                      "xtick.labelsize": 7, "ytick.labelsize": 7, "axes.spines.top": False,
                      "axes.spines.right": False, "lines.linewidth": 1.6, "legend.frameon": False})
@@ -25,21 +23,17 @@ def clip(g):
 
 
 def noise_band(ax, label=True, left=False):
-    """Mark the region where gaps are numerical round-off."""
     ax.axhspan(NOISE, 10 * NOISE, color="0.88", lw=0, zorder=0)
     if label:
         ax.text(0.02 if left else 0.98, 0.02, "round-off", transform=ax.transAxes, ha="left" if left else "right",
                 va="bottom", fontsize=6, color="0.4")
 
 
-#  ------------------------------------------------------------------ main-body figures
 L_ACC, L_BASE, L_MM = "accelerated (Alg. 1)", "JKO", r"non-accelerated ($\alpha_t\equiv1$)"
 
 
 def fig_main_outer(d, flat, ens):
-    """Acceleration against plain JKO: one flat target, and the gain against the curvature of the target."""
     fig, axes = plt.subplots(1, 2, figsize=(FULL, 2.45))
-    # (a) flat target: gap against outer steps
     ax = axes[0]
     lam = float(flat["lams"][0])
     FLAT_T = int(flat["T"])
@@ -56,7 +50,6 @@ def fig_main_outer(d, flat, ens):
     ax.set_xlabel("proximal steps $t$")
     ax.set_ylabel(r"objective gap $\mathrm{KL}(x_t\,\|\,q)$")
     ax.set_title(rf"(a) a flat target ($\lambda=10^{{{int(np.log10(lam))}}}$)")
-    # (b) gap / bound after a fixed budget against the curvature of the target, 50 random references
     ax = axes[1]
     lams = np.geomspace(1e-3, 1.0, ens["sweep_accel_u"].shape[1])
     keep = lams <= 0.1 * 1.001
@@ -81,8 +74,6 @@ def fig_main_outer(d, flat, ens):
 
 
 def fig_main_solver(d, e2e, e3e, r):
-    """(a) one proximal step on 50 random instances: scalar-step PDHG against Algorithm 2;
-    (b) the whole method on 20 random instances, 50 inner iterations per step: gap against total inner iterations."""
     fig, axes = plt.subplots(1, 2, figsize=(FULL, 2.6))
     ax = axes[0]
     K = 400
@@ -126,9 +117,7 @@ def ens_rel(e2e, key):
     return np.asarray(e2e[f"{key}_rel"], float)
 
 
-#  ------------------------------------------------------------------ appendix figures
 def fig_app_e1_methods(d, e1):
-    """All four schemes on the two fixed targets: the two accelerated ones coincide, as do the two others."""
     fig, axes = plt.subplots(1, 2, figsize=(FULL, 2.3))
     t = e1["t"][1:]
     for ax, name, title, logx, tmax in ((axes[0], "WEAK", r"weakly convex target, $\Sigma_q=\mathrm{diag}(25,10)$", True, 300),
@@ -156,7 +145,6 @@ def fig_app_e1_methods(d, e1):
 
 
 def fig_app_e1_ensemble(d, ens):
-    """Gap divided by the bound of Theorem 1 over 100 random instances."""
     fig, axes = plt.subplots(1, 2, figsize=(FULL, 2.2), sharey=True)
     t = ens["t"][1:]
     for ax, reg, title in ((axes[0], "weak", "weakly convex targets"), (axes[1], "strong", "strongly convex targets")):
@@ -182,7 +170,6 @@ def fig_app_e1_ensemble(d, ens):
 
 
 def fig_app_e2(d, e2):
-    """Channel-ratio sweep on both targets, and the certificate against the true gap."""
     fig, axes = plt.subplots(1, 3, figsize=(FULL, 2.3))
     K = 600
     k = np.arange(1, K + 1)
@@ -218,7 +205,6 @@ def fig_app_e2(d, e2):
 
 
 def fig_app_e3(d, e3):
-    """End to end on the two fixed targets: gap against the total number of inner iterations."""
     fig, axes = plt.subplots(1, 2, figsize=(FULL, 2.3), sharey=True)
     runs = (("mm_cert", BASE, "-", "non-accelerated, certified accuracy"), ("mm_fixed", BASE, "--", "non-accelerated, 50 inner iterations"),
             ("accel_cert", ACC, "-", "accelerated (Alg. 1), certified accuracy"), ("accel_fixed", ACC, "--", "accelerated (Alg. 1), 50 inner iterations"))
@@ -238,7 +224,6 @@ def fig_app_e3(d, e3):
     savefig(fig, d, "fig_app_e3")
 
 
-#  ------------------------------------------------------------------ tables
 def bold(s, on, tex):
     if not on:
         return s
@@ -248,7 +233,6 @@ def bold(s, on, tex):
 
 
 def sci(x, tex):
-    """1.4e-03 -> 1.4 x 10^-3."""
     if x < NOISE:
         return r"$<10^{-10}$" if tex else "<1e-10"
     m, e = f"{x:.1e}".split("e")
@@ -258,7 +242,6 @@ def sci(x, tex):
 
 
 def tab_outer(flat, tex):
-    """Outer scheme with exact steps: steps to a tolerance and gap after 100 steps."""
     rows = []
     FLAT_T = int(flat["T"])
     for lam in flat["lams"]:
@@ -275,7 +258,6 @@ def tab_outer(flat, tex):
 
 
 def tab_inner(e2e, tex):
-    """Inner solver over 50 random instances: median iterations to a relative gap."""
     pre = "preconditioned, " + (r"$(\sigma_\Lambda,\sigma_\mu)=$ " if tex else "(sig_L, sig_m) = ")
     confs = (("scalar", "scalar-step PDHG"), ("r1", pre + "(1, 1)"), ("r10", pre + "(1, 10)"), ("r100", pre + "(1, 100)"),
              ("s10_100", pre + "(10, 100)"), ("balanced", "preconditioned, balanced steps" + (r" \eqref{eq:balance}" if tex else "")))
@@ -301,7 +283,6 @@ def tab_inner(e2e, tex):
 
 
 def tab_e3(e3e, tex):
-    """End to end over 20 random instances: median normalised gap after t steps, and inner iterations spent."""
     T = e3e["accel_fixed_G"].shape[1] - 1
     tt = [k for k in (50, 100, 300) if k <= T]
     Gs = e3e["Gstar"][:, None]
@@ -359,7 +340,6 @@ def write_tables(d, flat, e2e, e3e):
 
 
 def load_e3(name):
-    """E3 results, or None if they predate the small-gamma protocol (rerun E3)."""
     path = os.path.join(RESULTS, name)
     if os.path.exists(path):
         z = np.load(path, allow_pickle=True)
